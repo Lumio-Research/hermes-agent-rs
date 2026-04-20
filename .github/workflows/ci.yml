@@ -21,6 +21,8 @@ jobs:
         run: cargo clippy --workspace --all-targets
       - name: Tests
         run: cargo test --workspace
+      - name: Parity fixture tests
+        run: cargo test -p hermes-parity-tests
 
   cross-build:
     runs-on: ubuntu-latest
