@@ -345,7 +345,7 @@ pub fn register_builtin_tools(
     // -- Browser (10 tools) --------------------------------------------------
     {
         let browser_backend: Arc<dyn crate::tools::browser::BrowserBackend> =
-            Arc::new(crate::backends::browser::CdpBrowserBackend::from_env());
+            Arc::new(crate::backends::browser::AutoBrowserBackend::from_env());
         reg(
             registry,
             "browser",
@@ -442,7 +442,10 @@ pub fn register_builtin_tools(
     reg(
         registry,
         "mixture_of_agents",
-        Arc::new(crate::tools::mixture_of_agents::MixtureOfAgentsHandler),
+        Arc::new(crate::tools::mixture_of_agents::MixtureOfAgentsHandler::new(
+            Arc::new(crate::tools::mixture_of_agents::StubMoaBackend),
+            crate::tools::mixture_of_agents::MoaConfig::default(),
+        )),
         "🤖",
         vec![],
     );
@@ -469,7 +472,7 @@ pub fn register_builtin_tools(
     reg(
         registry,
         "voice",
-        Arc::new(crate::tools::voice_mode::VoiceModeHandler),
+        Arc::new(crate::tools::voice_mode::VoiceModeHandler::default()),
         "🎤",
         vec![],
     );
@@ -496,7 +499,7 @@ pub fn register_builtin_tools(
     reg(
         registry,
         "security",
-        Arc::new(crate::tools::url_safety::UrlSafetyHandler),
+        Arc::new(crate::tools::url_safety::UrlSafetyHandler::default()),
         "🔒",
         vec![],
     );
