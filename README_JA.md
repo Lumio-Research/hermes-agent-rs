@@ -1,223 +1,139 @@
-# Hermes Agent (Rust)
+<div align="center">
 
-**[English](./README.md)** | **[中文](./README_ZH.md)** | **[日本語](./README_JA.md)** | **[한국어](./README_KO.md)**
+# ⚡ Hermes Agent
 
-[Hermes Agent](https://github.com/NousResearch/hermes-agent) のプロダクショングレード Rust 書き直し — [Nous Research](https://nousresearch.com) による自己進化型 AI エージェント。
+**自己進化する AI エージェント。バイナリひとつで、あらゆるプラットフォームに対応。**
 
-**84,000+ 行の Rust コード · 16 クレート · 641 テスト · 17 プラットフォームアダプタ · 30 ツールバックエンド · 8 メモリプラグイン · 6 クロスプラットフォームリリースターゲット**
+[Nous Research](https://nousresearch.com) の [Hermes Agent](https://github.com/NousResearch/hermes-agent) を Rust で書き直したプロダクション版。
+
+`110,000行超の Rust` · `1,354 テスト` · `17 クレート` · `~16MB バイナリ`
+
+**[English](./README.md)** · **[中文](./README_ZH.md)** · **[日本語](./README_JA.md)** · **[한국어](./README_KO.md)**
+
+</div>
 
 ---
 
-## Python v2026.4.13 アラインメント状況
+## なぜ Hermes？
 
-ベースライン対象：`NousResearch/hermes-agent@v2026.4.13`（`1af2e18d408a9dcc2c61d6fc1eef5c6667f8e254`）。
+🚀 **依存関係ゼロ** — 単一の静的バイナリ。Python も pip も Docker も不要。Raspberry Pi、月額 $3 の VPS、エアギャップサーバーにコピーして、そのまま実行。
 
-- 進捗：スコープ内のアラインメント項目 **13 / 13** 完了。
-- 完了済みの重点：プロンプト層/コア guidance の整合、Python 同型の `resolve_turn_route`/cheap-route パイプラインとランタイムスナップショット（`api_mode`、プライマリ `acp_command`/`acp_args`、クレデンシャルプール、`TurnRouteSignature`）を HTTP/外部プロセス系 provider まで拡張、スマートルーティングのランタイム切替とフォールバック、memory ツールの意味論と容量制限、`MEMORY.md`/`USER.md` スナップショット注入、memory ライフサイクルフック（`on_memory_write`、`queue_prefetch`、`on_pre_compress`、`on_session_end`、`on_delegation`）、`session_search` の二重モードと `role_filter`/limit 整合、memory/skill ナッジカウンタと任意のバックグラウンドレビュー（Python `v2026.4.13` と同じレビュープロンプト、`background_review_enabled` で制御、既定はオフ）、および self-evolution 節拍のフィクスチャ型パリティ検証。
-- 残りの重点：この 13 項目パリティ追跡外の能力拡張。
+🧠 **自己進化エンジン** — マルチアームドバンディットによるモデル選択、長期タスク計画、プロンプトとメモリの自動最適化。使うほどエージェントが賢くなる。
 
-### TODO（パリティ追跡）
+🔌 **17 プラットフォーム · 30 以上のツール · 8 つのメモリバックエンド** — Telegram、Discord、Slack、WhatsApp、Signal、Matrix ほか 11 プラットフォーム。ファイル操作、ブラウザ、コード実行、画像認識、音声、Web 検索、Home Assistant など。
 
-- [x] Long Memory：内蔵 memory action/target 意味論 + 文字数上限。
-- [x] Long Memory：セッション開始時の memory スナップショット注入。
-- [x] Long Memory：ライフサイクルフック（`on_memory_write`、`on_pre_compress`、`on_session_end`、`on_delegation`）。
-- [x] Session Search：recent モード（空 query）、キーワードモード、`role_filter`、`limit <= 5`。
-- [x] Session Search：子セッション→親セッション正規化（parent session 解決）。
-- [x] Session Search：Python 相当のセッション単位 LLM 要約パイプライン。
-- [x] Session Search：hidden/internal source フィルタリング整合。
-- [x] Session Search：実行時コンテキストから現在セッション lineage を自動注入/除外。
-- [x] Smart Model Selection：ターンごとの cheap-route と policy recommendation route。
-- [x] Smart Model Selection：ルート先 provider 構築失敗時に primary provider へフォールバック。
-- [x] Smart Model Selection：HTTP プロバイダ向け Python 形 `resolve_turn_route` + ランタイムスナップショット（`api_mode`、`command`/`args`、`credential_pool`、`signature`）。
-- [x] Smart Model Selection：サブプロセス/外部プロセス推論ランタイム（`openai-codex` / `qwen-oauth` / `copilot-acp` の auth-store/ランタイム経路を Rust 側へマップ）。
-- [x] Self-Evolution：Python 方式の memory/skill ナッジ周期 + 任意のバックグラウンドレビュー（Python `v2026.4.13` と同じプロンプト、既定オフ）。
-- [x] Self-Evolution：Python `v2026.4.13` 振る舞いフィクスチャとのパリティ検証テスト。
-- [x] サブエージェント実行ライフサイクル：プロセス内 `SubAgentOrchestrator`（`crates/hermes-agent/src/sub_agent_orchestrator.rs`）で `spawn / timeout / cancel / lineage` を実際に実行。子 `AgentLoop` は `tokio::spawn` で独立タスク化（async 再帰を回避）、`InterruptController` 経由の親→子キャンセル、壁時計タイムアウト、`SubAgentLineage` JSON を `$HERMES_HOME/subagents/<id>.json` に永続化。
-- [x] OAuth provider メタデータの集約：統一された provider 構成センター（`llm.<provider>.oauth_token_url` / `oauth_client_id`、`LlmProviderConfig` と `RuntimeProviderConfig` の両方）。`oauth_refresh_config` は構成センターを優先し、`HERMES_<PROVIDER>_OAUTH_TOKEN_URL` / `_OAUTH_CLIENT_ID` は後方互換のフォールバックとしてのみ使用。
+⚡ **真の並行処理** — Rust の tokio ランタイムがツール呼び出しを OS スレッドに分散。30 秒のブラウザスクレイプが 50ms のファイル読み取りをブロックしない。GIL なし。
 
-### 機能実装ステータス（要求チェックリスト）
-
-凡例：`implemented` = 現在のコードベースで利用可能、`partial` = 実装はあるが要求表現/挙動と完全一致ではない。
-
-| 機能 | ステータス | 備考 |
-|---|---|---|
-| Interactive CLI + one-shot（`crates/hermes-cli`） | implemented | TUI 対話モード + `chat --query` one-shot 経路あり。 |
-| Agent loop：ストリーミング + ツール実行 + コンテキスト圧縮 | implemented | `run_stream`、並列ツール実行、自動圧縮を実装。 |
-| Prompt caching | partial | SystemPromptBuilder のキャッシュはあるが、完全なクロスリクエスト挙動は未完了。 |
-| Provider：Anthropic / OpenAI chat-compatible / OpenAI Responses / OpenRouter-compatible | implemented | `hermes-agent`/`api_bridge`/拡張 provider で実装済み。 |
-| 組み込みツール：file/terminal/patch/memory/web/vision + opt-in code execution | implemented | ツールセットで網羅。コード実行は policy/toolset 制御前提。 |
-| 設定済み stdio/HTTP サーバーからの Runtime MCP ツール発見 | implemented | MCP client は stdio/http 設定と runtime tools/list をサポート。 |
-| prompts/resources 用 MCP bridge（capability gating 付き） | partial | prompts/resources API は存在。厳密な capability-gated bridge は継続整備中。 |
-| ローカル memory スナップショット + リクエスト単位の skill マッチ/注入 | implemented | `MEMORY.md`/`USER.md` 注入と skills prompt 編成を実装。 |
-| SQLite セッション履歴 + resume | implemented | `sessions.db` 永続化とセッション復元フローあり。 |
-| マルチモデル（OpenAI/Anthropic/OpenRouter） | implemented | ルーティング/provider スタックで対応。 |
-| 内蔵ツール数（要求 26） | implemented | Rust 側は既にそれ以上（30+ backend）。 |
-| TUI：対話チャット + 30+ slash コマンド + ツール進捗 + ステータスバー | implemented | TUI・ステータスバー・多数 slash 処理を実装。 |
-| コンテキスト自動ロード（`AGENTS.md`/`CLAUDE.md`/`MEMORY.md`/`USER.md`） | implemented | context file loader と memory snapshot loader あり。 |
-| メモリシステム：SQLite + FTS5 + クロスセッション永続化 | implemented | セッション永続化 + FTS `session_search` を実装。 |
-| Skills システム：YAML ベース作成/管理 | implemented | skills ツールチェーン + store/hub を実装。 |
-| Personality：coder/writer/analyst 切替 | partial | 切替機能は実装済み。具体ペルソナはローカル personality ファイル依存。 |
-| コンテキスト圧縮：自動 + 手動 | implemented | loop 自動圧縮 + 手動 slash 経路あり。 |
-| サブエージェント委任 | implemented | `delegate_task` + Signal/RPC バックエンド、**さらにプロセス内 `SubAgentOrchestrator`**（子 `AgentLoop` の実起動 / 壁時計タイムアウト / 協調的キャンセル / `$HERMES_HOME/subagents/` への lineage 永続化）。`max_depth`（既定 4）と `max_concurrent_delegates` 上限も有効。 |
-| Messaging：Telegram/Discord/Slack API | implemented | gateway プラットフォームアダプタあり。 |
-| セキュリティ：パス検証、危険コマンド遮断、検索深さ制限 | partial | コマンド承認と credential/file ガードあり。全要求軸の完全整合は継続中。 |
-| 中国語入力：TUI UTF-8 フル対応 | implemented | Rust/TUI 経路で UTF-8 入出力を処理可能。 |
-
-## ハイライト
-
-### シングルバイナリ、依存関係ゼロ
-
-~16MB のバイナリ一つ。Python、pip、virtualenv、Docker 不要。Raspberry Pi、$3/月 VPS、エアギャップサーバー、Docker scratch イメージで動作。
+## クイックスタート
 
 ```bash
-scp hermes user@server:~/
-./hermes
+# インストール
+curl -fsSL https://raw.githubusercontent.com/Lumio-Research/hermes-agent-rs/main/scripts/install.sh | bash
+
+# API キーを設定
+echo "ANTHROPIC_API_KEY=sk-..." >> ~/.hermes/.env
+
+# 起動
+hermes
 ```
 
-### 自己進化ポリシーエンジン
+これだけ。ツール、メモリ、ストリーミング出力が使えるインタラクティブセッションが始まる。
 
-エージェントが自身の実行から学習する。3 層の適応システム：
+## 何ができる？
 
-- **L1 — モデル＆リトライチューニング。** マルチアームドバンディットが履歴の成功率・レイテンシ・コストに基づきタスクごとに最適モデルを選択。リトライ戦略はタスクの複雑さに応じて動的に調整。
-- **L2 — 長タスク計画。** 複雑なプロンプトに対して並列度、サブタスク分割、チェックポイント間隔を自動決定。
-- **L3 — プロンプト＆メモリシェイピング。** システムプロンプトとメモリコンテキストを蓄積されたフィードバックに基づきリクエストごとに最適化・トリミング。
+**あらゆる LLM と対話** — 会話中にモデルを切り替え：
+```
+hermes
+> /model gpt-4o
+> このリポジトリを分析して、セキュリティの問題を見つけて
+```
 
-カナリアロールアウト、ハードゲートロールバック、監査ログ付きのポリシーバージョニング。手動チューニングなしでエンジンが時間とともに改善。
+**コマンドラインからワンショット実行**：
+```bash
+hermes chat --query "auth.rs を新しいエラー型にリファクタリングして"
+```
 
-### 真の並行性
+**マルチプラットフォームゲートウェイ** — Telegram、Discord、Slack などを同時接続：
+```bash
+hermes gateway start
+```
 
-Rust の tokio ランタイムが真の並列実行を提供 — Python の協調的 asyncio ではない。`JoinSet` がツール呼び出しを OS スレッドにディスパッチ。30 秒のブラウザスクレイプが 50ms のファイル読み取りをブロックしない。ゲートウェイは GIL なしで 17 プラットフォームのメッセージを同時処理。
+**どこでも実行** — Docker、SSH、リモートサンドボックス：
+```yaml
+# ~/.hermes/config.yaml
+terminal:
+  backend: docker
+  image: ubuntu:24.04
+```
 
-### 17 プラットフォームアダプタ
+**MCP + ACP** — 外部ツールサーバーに接続、または Hermes をツールサーバーとして公開：
+```yaml
+mcp:
+  servers:
+    - name: my-tools
+      command: npx my-mcp-server
+```
 
-Telegram、Discord、Slack、WhatsApp、Signal、Matrix、Mattermost、DingTalk、Feishu、WeCom、Weixin、Email、SMS、BlueBubbles、Home Assistant、Webhook、API Server。
-
-### 30 ツールバックエンド
-
-ファイル操作、ターミナル、ブラウザ、コード実行、Web 検索、ビジョン、画像生成、TTS、文字起こし、メモリ、メッセージング、委任、cron ジョブ、スキル、セッション検索、Home Assistant、RL トレーニング、URL 安全性チェック、OSV 脆弱性チェックなど。
-内蔵 `memory` ツールは Python パリティ意味論（`action=add|replace|remove`、`target=memory|user`、replace/remove の `old_text` 部分一致）に対応。
-内蔵 memory ストア上限も Python 既定と整合：`memory` ≈ 2200 文字、`user` ≈ 1375 文字。
-内蔵 `session_search` は Python 方式の二重モードに対応：`query` 省略で recent ブラウズ、`query` 指定でキーワード検索。`role_filter` 対応、`limit` 上限は 5。
-`session_search` は補助 LLM 認証がある場合にセッション単位要約を実行可能（`HERMES_SESSION_SEARCH_SUMMARY_API_KEY` または `OPENAI_API_KEY`、任意で base/model 上書き）。
-
-### 8 メモリプラグイン
-
-Mem0、Honcho、Holographic、Hindsight、ByteRover、OpenViking、RetainDB、Supermemory。
-
-### 6 ターミナルバックエンド
-
-Local、Docker、SSH、Daytona、Modal、Singularity。
-
-### MCP（Model Context Protocol）サポート
-
-組み込み MCP クライアントとサーバー。外部ツールプロバイダに接続、または Hermes ツールを他の MCP 互換エージェントに公開。
-
-### ACP（Agent Communication Protocol）
-
-セッション管理、イベントストリーミング、権限制御付きのエージェント間通信。
-
----
+**ボイスモード** — VAD + STT + TTS パイプラインでハンズフリー操作。
 
 ## アーキテクチャ
 
-### 16 クレートのワークスペース
-
 ```
-crates/
-├── hermes-core           # 共有型、trait、エラー階層
-├── hermes-agent          # エージェントループ、LLM プロバイダ、コンテキスト、メモリプラグイン
-├── hermes-tools          # ツールレジストリ、ディスパッチ、30 ツールバックエンド
-├── hermes-gateway        # メッセージゲートウェイ、17 プラットフォームアダプタ
-├── hermes-cli            # CLI/TUI バイナリ、スラッシュコマンド
-├── hermes-config         # 設定読み込み、マージ、YAML 互換
-├── hermes-intelligence   # 自己進化エンジン、モデルルーティング、プロンプト構築
-├── hermes-skills         # スキル管理、ストア、セキュリティガード
-├── hermes-environments   # ターミナルバックエンド
-├── hermes-cron           # Cron スケジューリングと永続化
-├── hermes-mcp            # Model Context Protocol クライアント/サーバー
-├── hermes-acp            # Agent Communication Protocol
-├── hermes-rl             # 強化学習ラン
-├── hermes-http           # HTTP/WebSocket API サーバー
-├── hermes-auth           # OAuth トークン交換
-└── hermes-telemetry      # OpenTelemetry 統合
+hermes-cli                    # バイナリエントリポイント、TUI、スラッシュコマンド
+├── hermes-agent              # エージェントループ、LLM プロバイダ、メモリプラグイン
+│   ├── hermes-core           # 共有型、trait、エラー階層
+│   ├── hermes-intelligence   # モデルルーティング、プロンプト構築、自己進化
+│   └── hermes-config         # 設定読み込み、YAML/環境変数マージ
+├── hermes-tools              # 30 以上のツールバックエンド、承認エンジン
+├── hermes-gateway            # 17 プラットフォームアダプタ、セッション管理
+├── hermes-environments       # ターミナル: Local/Docker/SSH/Daytona/Modal/Singularity
+├── hermes-mcp                # Model Context Protocol クライアント/サーバー
+├── hermes-acp                # Agent Communication Protocol
+├── hermes-skills             # スキル管理と Hub
+├── hermes-cron               # Cron スケジューリング
+├── hermes-http               # REST/WebSocket API サーバー
+├── hermes-auth               # OAuth トークン交換
+├── hermes-eval               # SWE-bench、Terminal-Bench、YC Bench
+└── hermes-telemetry          # OpenTelemetry + Prometheus
 ```
 
-### Trait ベースの抽象化
+**主要 trait：** `LlmProvider`（10 プロバイダ）· `ToolHandler`（30 以上のバックエンド）· `PlatformAdapter`（17 プラットフォーム）· `TerminalBackend`（6 バックエンド）· `MemoryProvider`（8 プラグイン）
 
-| Trait | 目的 | 実装 |
-|-------|------|------|
-| `LlmProvider` | LLM API 呼び出し | OpenAI, Anthropic, OpenRouter, Generic |
-| `ToolHandler` | ツール実行 | 30 ツールバックエンド |
-| `PlatformAdapter` | メッセージプラットフォーム | 17 プラットフォーム |
-| `TerminalBackend` | コマンド実行 | Local, Docker, SSH, Daytona, Modal, Singularity |
-| `MemoryProvider` | 永続メモリ | 8 メモリプラグイン + ファイル/SQLite |
-| `SkillProvider` | スキル管理 | ファイルストア + Hub |
-
----
+**ツールコールパーサー：** Hermes、Anthropic、OpenAI、Qwen、Llama、DeepSeek、Auto
 
 ## インストール
 
-**ワンライナー**（OS/CPU を自動検出、最新リリースを `~/.local/bin` にインストール）:
-
+**ワンライナー**（OS と CPU を自動検出）：
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Lumio-Research/hermes-agent-rs/main/scripts/install.sh | bash
 ```
 
-Cargo でソースから（Rust ツールチェインがある場合）:
-
+**ソースから：**
 ```bash
 cargo install --git https://github.com/Lumio-Research/hermes-agent-rs hermes-cli --locked
 ```
 
-スクリプト: [`scripts/install.sh`](scripts/install.sh)
+**手動ダウンロード：** [Releases](https://github.com/Lumio-Research/hermes-agent-rs/releases) からプラットフォーム別バイナリを取得。
 
----
-
-手動ダウンロード:
-
+**Docker：**
 ```bash
-# macOS (Apple Silicon)
-curl -LO https://github.com/Lumio-Research/hermes-agent-rs/releases/latest/download/hermes-macos-aarch64.tar.gz
-tar xzf hermes-macos-aarch64.tar.gz && sudo mv hermes /usr/local/bin/
-
-# macOS (Intel)
-curl -LO https://github.com/Lumio-Research/hermes-agent-rs/releases/latest/download/hermes-macos-x86_64.tar.gz
-tar xzf hermes-macos-x86_64.tar.gz && sudo mv hermes /usr/local/bin/
-
-# Linux (x86_64)
-curl -LO https://github.com/Lumio-Research/hermes-agent-rs/releases/latest/download/hermes-linux-x86_64.tar.gz
-tar xzf hermes-linux-x86_64.tar.gz && sudo mv hermes /usr/local/bin/
-
-# Linux (ARM64)
-curl -LO https://github.com/Lumio-Research/hermes-agent-rs/releases/latest/download/hermes-linux-aarch64.tar.gz
-tar xzf hermes-linux-aarch64.tar.gz && sudo mv hermes /usr/local/bin/
+docker run --rm -it -v ~/.hermes:/root/.hermes ghcr.io/lumio-research/hermes-agent-rs
 ```
 
-全リリースバイナリ：https://github.com/Lumio-Research/hermes-agent-rs/releases
+## コントリビュート
 
-## ソースからビルド
-
-```bash
-cargo build --release
-```
-
-## 実行
+コントリビュート歓迎。提出前にテストを実行してください：
 
 ```bash
-hermes              # インタラクティブチャット
-hermes --help       # 全コマンド
-hermes gateway start  # マルチプラットフォームゲートウェイ起動
-hermes doctor       # 依存関係と設定チェック
+cargo test --workspace        # 1,354 テスト
+cargo clippy --workspace      # リント
+cargo fmt --all --check       # フォーマット
 ```
 
-## テスト
-
-```bash
-cargo test --workspace   # 641 テスト
-```
+アーキテクチャの詳細とコーディング規約は [AGENTS.md](AGENTS.md) を参照。
 
 ## ライセンス
 
-MIT — [LICENSE](LICENSE) 参照。
+MIT — [LICENSE](LICENSE) を参照。
 
 [Nous Research](https://nousresearch.com) の [Hermes Agent](https://github.com/NousResearch/hermes-agent) に基づく。

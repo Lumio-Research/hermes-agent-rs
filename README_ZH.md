@@ -1,230 +1,136 @@
-# Hermes Agent (Rust)
+<div align="center">
 
-**[English](./README.md)** | **[中文](./README_ZH.md)** | **[日本語](./README_JA.md)** | **[한국어](./README_KO.md)**
+# ⚡ Hermes Agent
 
-[Hermes Agent](https://github.com/NousResearch/hermes-agent) 的生产级 Rust 重写版 — [Nous Research](https://nousresearch.com) 出品的自我进化 AI Agent。
+**自我进化的 AI Agent。一个二进制文件，全平台运行。**
 
-**84,000+ 行 Rust 代码 · 16 个 crate · 641 个测试 · 17 个平台适配器 · 30 个工具后端 · 8 个记忆插件 · 6 个跨平台发布目标**
+[Nous Research](https://nousresearch.com) 出品的 [Hermes Agent](https://github.com/NousResearch/hermes-agent) Rust 重写版。
+
+`110,000+ 行 Rust 代码` · `1,354 个测试` · `17 个 crate` · `~16MB 二进制`
+
+**[English](./README.md)** · **[中文](./README_ZH.md)** · **[日本語](./README_JA.md)** · **[한국어](./README_KO.md)**
+
+</div>
 
 ---
 
-## Python v2026.4.13 对齐状态
+## 为什么选择 Hermes？
 
-基线目标：`NousResearch/hermes-agent@v2026.4.13`（`1af2e18d408a9dcc2c61d6fc1eef5c6667f8e254`）。
+🚀 **零依赖** — 单个静态二进制文件。不需要 Python、pip、Docker。复制到树莓派、$3/月 VPS 或断网服务器，直接运行。
 
-- 进度：**13 / 13** 个范围内对齐项已完成。
-- 已完成重点：提示词分层/核心 guidance 对齐、与 Python 同构的 `resolve_turn_route`/cheap-route 流水线及运行时快照（`api_mode`、主配置 `acp_command`/`acp_args`、凭证池、`TurnRouteSignature`）并覆盖 HTTP 与外部进程提供商、智能路由运行时切换与回退、memory 工具语义与容量限制、内置 `MEMORY.md`/`USER.md` 快照注入、memory 生命周期钩子（`on_memory_write`、`queue_prefetch`、`on_pre_compress`、`on_session_end`、`on_delegation`）、`session_search` 双模式与 `role_filter`/limit 对齐、memory/skill 节拍计数与可选后台回顾（与 Python `v2026.4.13` 相同回顾提示词；默认关闭，由 `background_review_enabled` 控制），以及自进化节拍的 fixture 风格 parity 测试。
-- 剩余重点：超出这 13 项 parity tracker 的能力增强项。
+🧠 **自进化引擎** — 多臂老虎机模型选择、长任务规划、Prompt 与记忆自动塑形。用得越多，Agent 越聪明。
 
-### TODO（对齐追踪）
+🔌 **17 个平台 · 30+ 工具 · 8 个记忆后端** — Telegram、Discord、Slack、微信、钉钉、飞书、企业微信等 17 个平台。文件操作、浏览器、代码执行、视觉、语音、网页搜索、Home Assistant 等 30+ 工具。
 
-- [x] Long Memory：内置 memory action/target 语义 + 字符限制。
-- [x] Long Memory：会话启动时 memory 快照注入。
-- [x] Long Memory：生命周期钩子（`on_memory_write`、`on_pre_compress`、`on_session_end`、`on_delegation`）。
-- [x] Session Search：recent 模式（空 query）、关键词模式、`role_filter`、`limit <= 5`。
-- [x] Session Search：子会话到父会话归并（parent session 归一化）。
-- [x] Session Search：Python 等价的按会话 LLM 摘要流水线。
-- [x] Session Search：hidden/internal source 过滤规则。
-- [x] Session Search：按运行时上下文自动注入并排除当前活跃会话 lineage。
-- [x] Smart Model Selection：逐轮 cheap-route 与 policy recommendation 路由。
-- [x] Smart Model Selection：路由 provider 构建失败时回退主 provider。
-- [x] Smart Model Selection：面向 HTTP 提供商的 Python 形 `resolve_turn_route` + 运行时快照字段（`api_mode`、`command`/`args`、`credential_pool`、`signature`）。
-- [x] Smart Model Selection：子进程/外部进程推理运行时（已映射 `openai-codex` / `qwen-oauth` / `copilot-acp` 的 auth-store 与运行时元数据路径）。
-- [x] Self-Evolution：Python 风格 memory/skill 节拍与可选后台回顾轮次（与 Python `v2026.4.13` 相同提示词；默认关闭）。
-- [x] Self-Evolution：基于 Python `v2026.4.13` 行为基线的 parity 验证测试。
-- [x] 子 Agent 实际执行生命周期：新增进程内 `SubAgentOrchestrator`（`crates/hermes-agent/src/sub_agent_orchestrator.rs`），以真正的 `spawn / timeout / cancel / lineage` 替代原先的"信号化合同"；子代理以独立 `tokio::spawn` 任务运行（从而切断 async 递归）、父 → 子 取消通过 `InterruptController` 传播、强制墙钟 timeout，并把 `SubAgentLineage` JSON 持久化到 `$HERMES_HOME/subagents/<id>.json`（started / completed / failed / timeout / cancelled）。
-- [x] OAuth provider 元数据来源收敛：统一走「provider 配置中心」（`llm.<provider>.oauth_token_url` / `oauth_client_id`，同时存在于 `LlmProviderConfig` 与 `RuntimeProviderConfig`）；`oauth_refresh_config` 优先读取配置中心值，`HERMES_<PROVIDER>_OAUTH_TOKEN_URL` / `_OAUTH_CLIENT_ID` 只作为向后兼容的环境变量兜底。
+⚡ **真并发** — Rust tokio 运行时将工具调用分发到 OS 线程。30 秒的浏览器抓取不会阻塞 50ms 的文件读取。没有 GIL。
 
-### 能力实现状态（你要求的检查清单）
-
-状态说明：`implemented` = 当前代码库可用；`partial` = 已有实现但与目标描述尚未完全等价。
-
-| 能力 | 状态 | 说明 |
-|---|---|---|
-| 交互式 CLI + one-shot（`crates/hermes-cli`） | implemented | 已有 TUI 交互模式与 `chat --query` 单次执行路径。 |
-| Agent loop：流式 + 工具执行 + 上下文压缩 | implemented | 已实现 `run_stream`、并行工具执行、自动压缩。 |
-| Prompt caching | partial | 已有系统提示词构建缓存，但跨请求完整缓存语义尚未完全对齐。 |
-| Provider：Anthropic / OpenAI chat-compatible / OpenAI Responses / OpenRouter-compatible | implemented | `hermes-agent`/`api_bridge`/扩展 provider 适配已具备。 |
-| 内置工具：文件/终端/补丁/记忆/web/vision + 可选 code execution | implemented | 工具集合已覆盖这些类别；代码执行可通过策略/工具集控制开启。 |
-| 运行时 MCP 工具发现（stdio + HTTP） | implemented | MCP client 已支持 stdio/http 配置与运行时 tools 列举。 |
-| MCP prompts/resources bridge + capability gating | partial | prompts/resources API 能力已存在；严格 capability-gated bridge 行为仍在收口。 |
-| 本地 memory 快照 + 请求级技能匹配/注入 | implemented | `MEMORY.md`/`USER.md` 快照注入与 skills prompt 编排已接入。 |
-| SQLite 会话历史 + resume | implemented | `sessions.db` 持久化与会话加载/恢复流程已存在。 |
-| 多模型支持（OpenAI/Anthropic/OpenRouter） | implemented | 路由与 provider 栈支持。 |
-| 内置工具数量（你写 26） | implemented | Rust 当前已超过该数量（30+ 工具后端）。 |
-| TUI：交互聊天 + 30+ slash 命令 + 工具进度 + 状态栏 | implemented | TUI、状态栏、丰富 slash 命令处理已具备。 |
-| 上下文感知自动加载（`AGENTS.md`/`CLAUDE.md`/`MEMORY.md`/`USER.md`） | implemented | 上下文文件加载与 memory 快照加载已具备。 |
-| Memory 系统：SQLite + FTS5 + 跨会话持久化 | implemented | 会话持久化 + FTS `session_search` 已实现。 |
-| Skills 系统：YAML 技能创建与管理 | implemented | skills 工具链与 skill store/hub 已具备。 |
-| 人格系统：coder/writer/analyst 切换 | partial | 人格切换功能已实现；具体预置人格依赖本地人格文件。 |
-| 上下文压缩：自动 + 手动 | implemented | loop 自动压缩 + 手动 slash 命令路径已存在。 |
-| 子 Agent 委托 | implemented | `delegate_task` 工具 + Signal/RPC 后端 **以及进程内 `SubAgentOrchestrator`**（真正的子 `AgentLoop` 拉起 / 墙钟 timeout / 协作式取消 / 血缘 JSON 持久化到 `$HERMES_HOME/subagents/`）；`max_depth`（默认 4）与 `max_concurrent_delegates` 并发上限都已生效；委托血缘通过 `on_delegation` memory hook 记录。 |
-| 消息推送：Telegram/Discord/Slack API | implemented | gateway 平台适配已具备。 |
-| 安全：路径校验、危险命令拦截、搜索深度限制 | partial | 命令审批与凭据/文件防护已具备；部分安全维度仍在持续补齐。 |
-| 中文输入：TUI UTF-8 全支持 | implemented | Rust/TUI 链路可正常处理 UTF-8 输入输出。 |
-
-## 亮点
-
-### 单二进制，零依赖
-
-一个 ~16MB 的二进制文件。不需要 Python、pip、virtualenv、Docker。能跑在树莓派、$3/月 VPS、断网服务器、Docker scratch 镜像上。
+## 快速开始
 
 ```bash
-scp hermes user@server:~/
-./hermes
+# 安装
+curl -fsSL https://raw.githubusercontent.com/Lumio-Research/hermes-agent-rs/main/scripts/install.sh | bash
+
+# 设置 API 密钥
+echo "ANTHROPIC_API_KEY=sk-..." >> ~/.hermes/.env
+
+# 运行
+hermes
 ```
 
-### 自进化策略引擎
+就这样。你已经进入了一个带工具、记忆和流式输出的交互式会话。
 
-Agent 从自身执行中学习。三层自适应系统：
+## 能做什么？
 
-- **L1 — 模型与重试调优。** 多臂老虎机算法根据历史成功率、延迟和成本，为每个任务选择最佳模型。重试策略根据任务复杂度动态调整。
-- **L2 — 长任务规划。** 自动决定并行度、子任务拆分和检查点间隔。
-- **L3 — Prompt 与记忆塑形。** 系统提示词和记忆上下文根据累积反馈逐请求优化和裁剪。
+**与任意 LLM 对话** — 对话中随时切换模型：
+```
+hermes
+> /model gpt-4o
+> 分析这个仓库，找出安全问题
+```
 
-策略版本管理，支持灰度发布、硬门限回滚和审计日志。引擎随时间自动改进，无需手动调参。
+**命令行一次性任务**：
+```bash
+hermes chat --query "把 auth.rs 重构为新的错误类型"
+```
 
-### 真并发
+**多平台网关** — 同时连接 Telegram、Discord、Slack、微信等：
+```bash
+hermes gateway start
+```
 
-Rust 的 tokio 运行时提供真正的并行执行 — 不是 Python 的协作式 asyncio。`JoinSet` 将工具调用分发到 OS 线程。30 秒的浏览器抓取不会阻塞 50ms 的文件读取。Gateway 同时处理 17 个平台的消息，没有 GIL。
+**随处运行** — Docker、SSH 或远程沙箱：
+```yaml
+# ~/.hermes/config.yaml
+terminal:
+  backend: docker
+  image: ubuntu:24.04
+```
 
-### 17 个平台适配器
+**MCP + ACP** — 连接外部工具服务器，或将 Hermes 暴露为工具服务：
+```yaml
+mcp:
+  servers:
+    - name: my-tools
+      command: npx my-mcp-server
+```
 
-Telegram、Discord、Slack、WhatsApp、Signal、Matrix、Mattermost、钉钉、飞书、企业微信、微信、Email、SMS、BlueBubbles、Home Assistant、Webhook、API Server。
-
-### 30 个工具后端
-
-文件操作、终端、浏览器、代码执行、网页搜索、视觉、图像生成、TTS、语音转写、记忆、消息、委托、定时任务、技能、会话搜索、Home Assistant、RL 训练、URL 安全检查、OSV 漏洞检查等。
-内置 `memory` 工具已对齐 Python 语义：`action=add|replace|remove`、`target=memory|user`，并使用 `old_text` 子串匹配 replace/remove。
-内置 memory 存储容量也与 Python 默认一致：`memory` ≈ 2200 字符，`user` ≈ 1375 字符。
-内置 `session_search` 支持 Python 风格双模式：省略 `query` 可浏览最近会话；带 `query` 可关键词召回，支持 `role_filter` 且 `limit` 上限为 5。
-`session_search` 在有辅助模型凭据时可进行按会话 LLM 摘要（`HERMES_SESSION_SEARCH_SUMMARY_API_KEY` 或 `OPENAI_API_KEY`，可选 base/model 覆盖）。
-
-### 8 个记忆插件
-
-Mem0、Honcho、Holographic、Hindsight、ByteRover、OpenViking、RetainDB、Supermemory。
-
-### 6 个终端后端
-
-Local、Docker、SSH、Daytona、Modal、Singularity。
-
-### MCP（Model Context Protocol）支持
-
-内置 MCP 客户端和服务端。连接外部工具提供者，或将 Hermes 工具暴露给其他 MCP 兼容的 Agent。
-
-### ACP（Agent Communication Protocol）
-
-Agent 间通信，支持会话管理、事件流和权限控制。
-
----
+**语音模式** — VAD + STT + TTS 流水线，解放双手。
 
 ## 架构
 
-### 16 个 Crate 的 Workspace
-
 ```
-crates/
-├── hermes-core           # 共享类型、trait、错误层级
-├── hermes-agent          # Agent loop、LLM provider、上下文、记忆插件
-├── hermes-tools          # 工具注册、分发、30 个工具后端
-├── hermes-gateway        # 消息网关、17 个平台适配器
-├── hermes-cli            # CLI/TUI 二进制、斜杠命令
-├── hermes-config         # 配置加载、合并、YAML 兼容
-├── hermes-intelligence   # 自进化引擎、模型路由、Prompt 构建
-├── hermes-skills         # 技能管理、存储、安全守卫
-├── hermes-environments   # 终端后端（Local/Docker/SSH/Daytona/Modal/Singularity）
-├── hermes-cron           # Cron 调度和持久化
-├── hermes-mcp            # Model Context Protocol 客户端/服务端
-├── hermes-acp            # Agent Communication Protocol
-├── hermes-rl             # 强化学习运行
-├── hermes-http           # HTTP/WebSocket API 服务
-├── hermes-auth           # OAuth 令牌交换
-└── hermes-telemetry      # OpenTelemetry 集成
+hermes-cli                    # 二进制入口、TUI、斜杠命令
+├── hermes-agent              # Agent 循环、LLM 提供商、记忆插件
+│   ├── hermes-core           # 共享类型、trait、错误层级
+│   ├── hermes-intelligence   # 模型路由、Prompt 构建、自进化
+│   └── hermes-config         # 配置加载、YAML/环境变量合并
+├── hermes-tools              # 30+ 工具后端、审批引擎
+├── hermes-gateway            # 17 个平台适配器、会话管理
+├── hermes-environments       # 终端：Local/Docker/SSH/Daytona/Modal/Singularity
+├── hermes-mcp                # Model Context Protocol 客户端/服务端
+├── hermes-acp                # Agent Communication Protocol
+├── hermes-skills             # 技能管理与 Hub
+├── hermes-cron               # 定时任务调度
+├── hermes-http               # REST/WebSocket API 服务
+├── hermes-auth               # OAuth 令牌交换
+├── hermes-eval               # SWE-bench、Terminal-Bench、YC Bench
+└── hermes-telemetry          # OpenTelemetry + Prometheus
 ```
 
-### 基于 Trait 的抽象
+**核心 trait：** `LlmProvider`（10 个提供商）· `ToolHandler`（30+ 后端）· `PlatformAdapter`（17 个平台）· `TerminalBackend`（6 个后端）· `MemoryProvider`（8 个插件）
 
-| Trait | 用途 | 实现 |
-|-------|------|------|
-| `LlmProvider` | LLM API 调用 | OpenAI, Anthropic, OpenRouter, Generic |
-| `ToolHandler` | 工具执行 | 30 个工具后端 |
-| `PlatformAdapter` | 消息平台 | 17 个平台 |
-| `TerminalBackend` | 命令执行 | Local, Docker, SSH, Daytona, Modal, Singularity |
-| `MemoryProvider` | 持久化记忆 | 8 个记忆插件 + 文件/SQLite |
-| `SkillProvider` | 技能管理 | 文件存储 + Hub |
-
----
+**工具调用解析器：** Hermes、Anthropic、OpenAI、Qwen、Llama、DeepSeek、Auto
 
 ## 安装
 
-**一键安装**（自动识别系统与架构，下载最新 release，默认安装到 `~/.local/bin`）：
-
+**一键安装**（自动识别系统与架构）：
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Lumio-Research/hermes-agent-rs/main/scripts/install.sh | bash
 ```
 
-安装到系统目录示例：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Lumio-Research/hermes-agent-rs/main/scripts/install.sh | sudo INSTALL_DIR=/usr/local/bin bash
-```
-
-**用 Cargo 从源码安装**（本机已安装 Rust 时）：
-
+**从源码安装：**
 ```bash
 cargo install --git https://github.com/Lumio-Research/hermes-agent-rs hermes-cli --locked
 ```
 
-安装脚本源码见仓库 [`scripts/install.sh`](scripts/install.sh)，可先下载审阅再执行。
+**手动下载：** 从 [Releases](https://github.com/Lumio-Research/hermes-agent-rs/releases) 下载对应平台的二进制文件。
 
----
-
-手动下载对应平台的 release 包并解压（与上面一键脚本等价，只是步骤更多）：
-
+**Docker：**
 ```bash
-# macOS (Apple Silicon)
-curl -LO https://github.com/Lumio-Research/hermes-agent-rs/releases/latest/download/hermes-macos-aarch64.tar.gz
-tar xzf hermes-macos-aarch64.tar.gz && sudo mv hermes /usr/local/bin/
-
-# macOS (Intel)
-curl -LO https://github.com/Lumio-Research/hermes-agent-rs/releases/latest/download/hermes-macos-x86_64.tar.gz
-tar xzf hermes-macos-x86_64.tar.gz && sudo mv hermes /usr/local/bin/
-
-# Linux (x86_64)
-curl -LO https://github.com/Lumio-Research/hermes-agent-rs/releases/latest/download/hermes-linux-x86_64.tar.gz
-tar xzf hermes-linux-x86_64.tar.gz && sudo mv hermes /usr/local/bin/
-
-# Linux (ARM64)
-curl -LO https://github.com/Lumio-Research/hermes-agent-rs/releases/latest/download/hermes-linux-aarch64.tar.gz
-tar xzf hermes-linux-aarch64.tar.gz && sudo mv hermes /usr/local/bin/
-
-# Linux (musl / Alpine / Docker)
-curl -LO https://github.com/Lumio-Research/hermes-agent-rs/releases/latest/download/hermes-linux-x86_64-musl.tar.gz
-tar xzf hermes-linux-x86_64-musl.tar.gz && sudo mv hermes /usr/local/bin/
+docker run --rm -it -v ~/.hermes:/root/.hermes ghcr.io/lumio-research/hermes-agent-rs
 ```
 
-所有 release 二进制：https://github.com/Lumio-Research/hermes-agent-rs/releases
+## 贡献
 
-## 从源码构建
-
-```bash
-cargo build --release
-```
-
-## 运行
+欢迎贡献。提交前请运行测试：
 
 ```bash
-hermes              # 交互式聊天
-hermes --help       # 所有命令
-hermes gateway start  # 启动多平台网关
-hermes doctor       # 检查依赖和配置
+cargo test --workspace        # 1,354 个测试
+cargo clippy --workspace      # 代码检查
+cargo fmt --all --check       # 格式检查
 ```
 
-## 测试
-
-```bash
-cargo test --workspace   # 641 个测试
-```
+架构细节和编码规范见 [AGENTS.md](AGENTS.md)。
 
 ## 许可证
 
