@@ -1,6 +1,6 @@
 //! In-process sub-agent orchestrator.
 //!
-//! Python v2026.4.13 parity: when the primary agent calls `delegate_task`, we
+//! Python v2026.4.16 parity: when the primary agent calls `delegate_task`, we
 //! actually spawn a bounded child [`AgentLoop`] rather than just returning a
 //! signal envelope. The orchestrator is responsible for:
 //!

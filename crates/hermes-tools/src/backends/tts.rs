@@ -12,8 +12,8 @@ use serde_json::json;
 use crate::tools::tts::TtsBackend;
 use crate::tts_streaming::minimax::MiniMaxTtsBackend;
 use hermes_config::managed_gateway::{
-    resolve_managed_tool_gateway, resolve_openai_audio_api_key, ManagedToolGatewayConfig,
-    ResolveOptions,
+    prefers_gateway, resolve_managed_tool_gateway, resolve_openai_audio_api_key,
+    ManagedToolGatewayConfig, ResolveOptions,
 };
 use hermes_core::ToolError;
 
@@ -97,27 +97,36 @@ impl MultiTtsBackend {
     }
 
     async fn openai_tts(&self, text: &str, voice: &str) -> Result<String, ToolError> {
-        // Resolve transport in priority order:
-        // 1. Managed Nous gateway (HERMES_ENABLE_NOUS_MANAGED_TOOLS + Nous token)
-        // 2. Direct OpenAI with VOICE_TOOLS_OPENAI_KEY override or OPENAI_API_KEY
+        // Python 4.16 semantics:
+        // - `tts.use_gateway: true`  -> managed only
+        // - otherwise                -> direct first, managed fallback
+        let force_gateway = prefers_gateway("tts");
+        let direct_key = resolve_openai_audio_api_key();
         let managed = resolve_managed_tool_gateway("openai-audio", ResolveOptions::default());
-        let (endpoint, bearer, transport) = match managed {
-            Some(cfg) => Self::openai_audio_managed_endpoint(&cfg),
-            None => {
-                let key = resolve_openai_audio_api_key();
-                if key.is_empty() {
+        let (endpoint, bearer, transport) = if force_gateway {
+            match managed {
+                Some(cfg) => Self::openai_audio_managed_endpoint(&cfg),
+                None => {
                     return Err(ToolError::ExecutionFailed(
-                        "OPENAI_API_KEY (or VOICE_TOOLS_OPENAI_KEY) not set, and no managed \
-                         openai-audio gateway is configured."
+                        "tts.use_gateway=true but no managed openai-audio gateway is configured."
                             .into(),
                     ));
                 }
-                (
-                    format!("{}/audio/speech", self.openai_base_url),
-                    key,
-                    "direct",
-                )
             }
+        } else if !direct_key.is_empty() {
+            (
+                format!("{}/audio/speech", self.openai_base_url),
+                direct_key,
+                "direct",
+            )
+        } else if let Some(cfg) = managed {
+            Self::openai_audio_managed_endpoint(&cfg)
+        } else {
+            return Err(ToolError::ExecutionFailed(
+                "OPENAI_API_KEY (or VOICE_TOOLS_OPENAI_KEY) not set, and no managed \
+                 openai-audio gateway is configured."
+                    .into(),
+            ));
         };
 
         let body = json!({
@@ -205,12 +214,15 @@ impl TtsBackend for MultiTtsBackend {
         provider: Option<&str>,
     ) -> Result<String, ToolError> {
         // Default provider preference:
-        // 1. ELEVENLABS_API_KEY set → elevenlabs (highest quality)
-        // 2. Otherwise OpenAI (cheapest HTTP-only path)
+        // 1. `tts.use_gateway: true` → openai via managed gateway
+        // 2. ELEVENLABS_API_KEY set → elevenlabs (highest quality)
+        // 3. Otherwise OpenAI (cheapest HTTP-only path)
         // Zero-Python: edge_tts removed entirely — callers asking for
         // "edge_tts" receive a clear migration error.
         let resolved_provider = provider.unwrap_or_else(|| {
-            if self.elevenlabs_key.is_some() {
+            if prefers_gateway("tts") {
+                "openai"
+            } else if self.elevenlabs_key.is_some() {
                 "elevenlabs"
             } else {
                 "openai"
@@ -247,6 +259,49 @@ impl TtsBackend for MultiTtsBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hermes_config::managed_gateway::test_lock;
+
+    struct EnvScope {
+        _tmp: tempfile::TempDir,
+        original: Vec<(&'static str, Option<String>)>,
+        _g: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl EnvScope {
+        fn new() -> Self {
+            let g = test_lock::lock();
+            let tmp = tempfile::tempdir().unwrap();
+            let keys = [
+                "HERMES_HOME",
+                "OPENAI_API_KEY",
+                "VOICE_TOOLS_OPENAI_KEY",
+                "ELEVENLABS_API_KEY",
+                "TOOL_GATEWAY_USER_TOKEN",
+                "HERMES_ENABLE_NOUS_MANAGED_TOOLS",
+            ];
+            let original = keys.iter().map(|k| (*k, std::env::var(k).ok())).collect();
+            for k in &keys {
+                std::env::remove_var(k);
+            }
+            std::env::set_var("HERMES_HOME", tmp.path());
+            Self {
+                _tmp: tmp,
+                original,
+                _g: g,
+            }
+        }
+    }
+
+    impl Drop for EnvScope {
+        fn drop(&mut self) {
+            for (k, v) in &self.original {
+                match v {
+                    Some(val) => std::env::set_var(k, val),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+    }
 
     #[test]
     fn openai_audio_managed_endpoint_appends_audio_speech() {
@@ -296,5 +351,22 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.to_string().contains("Unknown"));
+    }
+
+    #[tokio::test]
+    async fn tts_use_gateway_blocks_direct_openai_fallback() {
+        let _g = EnvScope::new();
+        std::fs::write(
+            std::path::Path::new(&std::env::var("HERMES_HOME").unwrap()).join("config.yaml"),
+            "tts:\n  use_gateway: true\n",
+        )
+        .unwrap();
+        std::env::set_var("OPENAI_API_KEY", "direct-openai");
+        let backend = MultiTtsBackend::new();
+        let err = backend
+            .synthesize("hello", None, Some("openai"))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("tts.use_gateway=true"));
     }
 }

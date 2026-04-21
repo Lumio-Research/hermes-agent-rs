@@ -56,8 +56,8 @@ impl LlmProvider for DummyProvider {
 }
 
 #[test]
-fn parity_python_v2026_4_13_self_evolution_fixtures() {
-    let raw = include_str!("fixtures/python_v2026_4_13_self_evolution.json");
+fn parity_python_v2026_4_16_self_evolution_fixtures() {
+    let raw = include_str!("fixtures/python_v2026_4_16_self_evolution.json");
     let cases: Vec<FixtureCase> = serde_json::from_str(raw).expect("valid fixture json");
     let rt = tokio::runtime::Runtime::new().expect("runtime");
 

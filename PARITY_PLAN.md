@@ -2,7 +2,7 @@
 
 > **目标**：在 **8 周内（单人 + AI）** 或 **5 周内（双人 + AI）** 让 `hermes-agent-rust` 达到与 `hermes-agent` (Python) **用户感知 100% 功能对等**。
 >
-> **基准**：Python `NousResearch/hermes-agent@v2026.4.13`
+> **基准**：Python `NousResearch/hermes-agent@v2026.4.16`
 > **交付定义**：每个模块通过 Python fixture 对照测试 + 端到端集成测试
 
 ---
@@ -62,7 +62,7 @@ hermes-parity-tests/
 4. 日志用 `tracing::{debug,info,warn,error}`，不要 println!
 5. async 函数用 tokio 运行时，不要用 async-std
 6. 测试必须对照 fixtures/<module_name>/*.json 做断言
-7. 每个 PR 只移植一个模块，commit message 用：`parity(<module>): port from python v2026.4.13`
+7. 每个 PR 只移植一个模块，commit message 用：`parity(<module>): port from python v2026.4.16`
 
 ## 禁止事项
 - 禁止修改 crate 工作空间结构
@@ -541,7 +541,7 @@ python benchmarks/e2e_latency.py
 
 #### Day 4：文档
 
-- 更新 `README.md`（把 "13/13 parity" 改为 "Full parity with Python v2026.4.13"）
+- 更新 `README.md`（把 "13/13 parity" 改为 "Full parity with Python v2026.4.16"）
 - 更新 `README_ZH.md` / `README_JA.md` / `README_KO.md`
 - 写 `MIGRATION.md`（Python 用户如何迁移）
 
@@ -608,7 +608,7 @@ python benchmarks/e2e_latency.py
 ### 交付
 1. 实现代码
 2. 单元测试（覆盖率 ≥ 80%）
-3. 一行 commit message：`parity(<module>): port from python v2026.4.13`
+3. 一行 commit message：`parity(<module>): port from python v2026.4.16`
 ```
 
 ### 模板 2：调试修复

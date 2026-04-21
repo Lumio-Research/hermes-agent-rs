@@ -208,7 +208,7 @@ const SESSION_SEARCH_GUIDANCE: &str = "When the user references something from a
 const SKILLS_GUIDANCE: &str = "After completing a complex task (5+ tool calls), fixing a tricky error, or discovering a non-trivial workflow, save the approach as a skill with skill_manage so you can reuse it next time. When using a skill and finding it outdated or incomplete, patch it immediately with skill_manage(action='patch').";
 const OAUTH_REFRESH_BACKOFF_SECS: u64 = 60;
 
-// Python `AIAgent._MEMORY_REVIEW_PROMPT` / `_SKILL_REVIEW_PROMPT` / `_COMBINED_REVIEW_PROMPT` (v2026.4.13)
+// Python `AIAgent._MEMORY_REVIEW_PROMPT` / `_SKILL_REVIEW_PROMPT` / `_COMBINED_REVIEW_PROMPT` (v2026.4.16)
 const MEMORY_REVIEW_PROMPT: &str = "Review the conversation above and consider saving to memory if appropriate.\n\n\
 Focus on:\n\
 1. Has the user revealed things about themselves — their persona, desires, preferences, or personal details worth remembering?\n\
@@ -5514,7 +5514,7 @@ mod tests {
             }
         }
 
-        // Fixture-style cases distilled from Python v2026.4.13:
+        // Fixture-style cases distilled from Python v2026.4.16:
         // - counter persists across runs
         // - resets to 0 when hitting interval threshold
         #[derive(Clone, Copy)]

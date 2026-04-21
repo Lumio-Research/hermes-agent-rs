@@ -3,6 +3,8 @@
 
 use std::path::PathBuf;
 
+use crate::loader::load_config;
+
 /// Truthy strings recognised by Python's `is_truthy_value`. Kept as a
 /// lowercase compile-time array so we can also drive doctests.
 const TRUTHY: &[&str] = &["1", "true", "yes", "on"];
@@ -22,9 +24,33 @@ pub fn env_var_enabled(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Hidden feature flag for the Nous-managed tools rollout.
+/// Best-effort Rust mirror of Python's subscription gate.
+///
+/// Priority:
+/// 1. legacy `HERMES_ENABLE_NOUS_MANAGED_TOOLS` env flag (for back-compat/tests)
+/// 2. a readable Nous access token in env / `auth.json`
 pub fn managed_nous_tools_enabled() -> bool {
-    env_var_enabled("HERMES_ENABLE_NOUS_MANAGED_TOOLS")
+    if env_var_enabled("HERMES_ENABLE_NOUS_MANAGED_TOOLS") {
+        return true;
+    }
+    super::auth::read_nous_access_token(None).is_some()
+}
+
+/// Return true when `<section>.use_gateway` is enabled in `config.yaml`.
+///
+/// Mirrors Python's `prefers_gateway(config_section)` helper. Unknown sections
+/// and config read failures are treated as `false`.
+pub fn prefers_gateway(config_section: &str) -> bool {
+    let Ok(cfg) = load_config(None) else {
+        return false;
+    };
+    match config_section {
+        "web" => cfg.web.use_gateway,
+        "image_gen" => cfg.image_gen.use_gateway,
+        "tts" => cfg.tts.use_gateway,
+        "browser" => cfg.browser.use_gateway,
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -264,9 +290,13 @@ mod tests {
 
     #[test]
     fn resolve_modal_backend_state_truth_table() {
-        let _g = EnvGuard::new(&["HERMES_ENABLE_NOUS_MANAGED_TOOLS"]);
+        let _g = EnvGuard::new(&[
+            "HERMES_ENABLE_NOUS_MANAGED_TOOLS",
+            "TOOL_GATEWAY_USER_TOKEN",
+        ]);
 
         std::env::remove_var("HERMES_ENABLE_NOUS_MANAGED_TOOLS");
+        std::env::remove_var("TOOL_GATEWAY_USER_TOKEN");
         let s = resolve_modal_backend_state(Some("auto"), true, true);
         assert_eq!(s.selected_backend, Some(SelectedBackend::Direct));
         assert!(!s.managed_mode_blocked);
@@ -295,9 +325,13 @@ mod tests {
 
     #[test]
     fn env_flag_helpers_round_trip() {
-        let _g = EnvGuard::new(&["HERMES_ENABLE_NOUS_MANAGED_TOOLS"]);
+        let _g = EnvGuard::new(&[
+            "HERMES_ENABLE_NOUS_MANAGED_TOOLS",
+            "TOOL_GATEWAY_USER_TOKEN",
+        ]);
 
         std::env::remove_var("HERMES_ENABLE_NOUS_MANAGED_TOOLS");
+        std::env::remove_var("TOOL_GATEWAY_USER_TOKEN");
         assert!(!managed_nous_tools_enabled());
 
         std::env::set_var("HERMES_ENABLE_NOUS_MANAGED_TOOLS", "yes");
@@ -305,6 +339,31 @@ mod tests {
 
         std::env::set_var("HERMES_ENABLE_NOUS_MANAGED_TOOLS", "no");
         assert!(!managed_nous_tools_enabled());
+
+        std::env::remove_var("HERMES_ENABLE_NOUS_MANAGED_TOOLS");
+        std::env::set_var("TOOL_GATEWAY_USER_TOKEN", "tok");
+        assert!(managed_nous_tools_enabled());
+    }
+
+    #[test]
+    fn prefers_gateway_reads_tool_sections_from_config() {
+        let _g = EnvGuard::new(&["HERMES_HOME"]);
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("HERMES_HOME", tmp.path());
+        std::fs::write(
+            tmp.path().join("config.yaml"),
+            r#"
+web:
+  use_gateway: true
+tts:
+  use_gateway: false
+"#,
+        )
+        .unwrap();
+
+        assert!(prefers_gateway("web"));
+        assert!(!prefers_gateway("tts"));
+        assert!(!prefers_gateway("image_gen"));
     }
 
     #[test]

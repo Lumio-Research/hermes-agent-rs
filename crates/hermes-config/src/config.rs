@@ -57,6 +57,22 @@ pub struct GatewayConfig {
     #[serde(default)]
     pub terminal: TerminalConfig,
 
+    /// Web-tool backend selection (`backend`, `use_gateway`, ...).
+    #[serde(default)]
+    pub web: ToolCapabilityConfig,
+
+    /// Image-generation backend selection (`provider`, `use_gateway`, ...).
+    #[serde(default)]
+    pub image_gen: ToolCapabilityConfig,
+
+    /// Text-to-speech backend selection (`provider`, `use_gateway`, ...).
+    #[serde(default)]
+    pub tts: ToolCapabilityConfig,
+
+    /// Browser automation backend selection (`cloud_provider`, `use_gateway`, ...).
+    #[serde(default)]
+    pub browser: ToolCapabilityConfig,
+
     /// Named LLM provider configurations.
     #[serde(default)]
     pub llm_providers: HashMap<String, LlmProviderConfig>,
@@ -111,6 +127,10 @@ impl Default for GatewayConfig {
             session: SessionConfig::default(),
             streaming: StreamingConfig::default(),
             terminal: TerminalConfig::default(),
+            web: ToolCapabilityConfig::default(),
+            image_gen: ToolCapabilityConfig::default(),
+            tts: ToolCapabilityConfig::default(),
+            browser: ToolCapabilityConfig::default(),
             llm_providers: HashMap::new(),
             smart_model_routing: SmartModelRoutingConfig::default(),
             proxy: None,
@@ -354,6 +374,10 @@ pub struct TerminalConfig {
     #[serde(default = "default_max_output_size")]
     pub max_output_size: usize,
 
+    /// Direct-vs-managed preference when `backend = modal`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modal_mode: Option<String>,
+
     /// Working directory override for command execution.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workdir: Option<String>,
@@ -365,6 +389,7 @@ impl Default for TerminalConfig {
             backend: TerminalBackendType::default(),
             timeout: default_terminal_timeout(),
             max_output_size: default_max_output_size(),
+            modal_mode: None,
             workdir: None,
         }
     }
@@ -411,6 +436,24 @@ impl Default for ApprovalConfig {
             whitelist_commands: Vec::new(),
         }
     }
+}
+
+/// Shared shape for tool-capability routing config copied from Python's
+/// `config.yaml` sections such as `web`, `tts`, `image_gen`, and `browser`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ToolCapabilityConfig {
+    /// Generic backend selector (`web.backend`, etc).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
+    /// Generic provider selector (`tts.provider`, `image_gen.provider`, ...).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Browser-specific cloud provider selector.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_provider: Option<String>,
+    /// When true, prefer the Nous Tool Gateway over direct credentials.
+    #[serde(default)]
+    pub use_gateway: bool,
 }
 
 /// Skills configuration.

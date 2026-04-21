@@ -18,8 +18,10 @@
 use async_trait::async_trait;
 use reqwest::Client;
 
+use hermes_config::load_config;
 use hermes_config::managed_gateway::{
-    resolve_managed_tool_gateway, ManagedToolGatewayConfig, ResolveOptions,
+    resolve_managed_tool_gateway, resolve_modal_backend_state, ManagedToolGatewayConfig,
+    ResolveOptions, SelectedBackend,
 };
 use hermes_core::{AgentError, CommandOutput, TerminalBackend};
 
@@ -116,28 +118,37 @@ impl ManagedModalBackend {
 
     /// Resolve the best-available transport from the environment.
     ///
-    /// Priority:
-    /// 1. `MODAL_API_TOKEN` env var → `DirectApi`
-    /// 2. Nous-managed `modal` vendor (requires
-    ///    `HERMES_ENABLE_NOUS_MANAGED_TOOLS` and a Nous OAuth token) →
-    ///    `Managed`
-    /// 3. `Err(AgentError::Io)` with a message covering both paths.
+    /// Honors `terminal.modal_mode` (`auto` / `direct` / `managed`) from the
+    /// merged config when present. `auto` prefers managed, then direct.
     pub fn from_env_or_managed() -> Result<Self, AgentError> {
-        if let Ok(token) = std::env::var("MODAL_API_TOKEN") {
-            let trimmed = token.trim();
-            if !trimmed.is_empty() {
-                return Ok(Self::new(trimmed));
+        let direct_token = std::env::var("MODAL_API_TOKEN")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let managed_cfg = resolve_managed_tool_gateway("modal", ResolveOptions::default());
+        let modal_mode = load_config(None)
+            .ok()
+            .and_then(|cfg| cfg.terminal.modal_mode);
+        let state = resolve_modal_backend_state(
+            modal_mode.as_deref(),
+            direct_token.is_some(),
+            managed_cfg.is_some(),
+        );
+        match state.selected_backend {
+            Some(SelectedBackend::Direct) => {
+                Ok(Self::new(direct_token.as_deref().expect("checked is_some")))
+            }
+            Some(SelectedBackend::Managed) => {
+                Ok(Self::from_managed(&managed_cfg.expect("checked is_some")))
+            }
+            None => {
+                let mode = state.mode.as_str();
+                Err(AgentError::Io(format!(
+                    "No usable Modal backend for terminal.modal_mode={mode}. \
+                     Provide MODAL_API_TOKEN for direct mode, or configure the managed `modal` gateway."
+                )))
             }
         }
-        if let Some(cfg) = resolve_managed_tool_gateway("modal", ResolveOptions::default()) {
-            return Ok(Self::from_managed(&cfg));
-        }
-        Err(AgentError::Io(
-            "MODAL_API_TOKEN not set and Nous-managed `modal` gateway is not configured. \
-             Set MODAL_API_TOKEN, or enable HERMES_ENABLE_NOUS_MANAGED_TOOLS with a Nous \
-             OAuth token (TOOL_GATEWAY_USER_TOKEN or auth.json)."
-                .into(),
-        ))
     }
 
     /// Set the GPU type for newly created workspaces.
@@ -489,6 +500,21 @@ mod managed_modal_tests {
     }
 
     #[test]
+    fn from_env_or_managed_honors_terminal_modal_mode_managed() {
+        let _g = EnvScope::new();
+        std::fs::write(
+            std::path::Path::new(&std::env::var("HERMES_HOME").unwrap()).join("config.yaml"),
+            "terminal:\n  backend: modal\n  modal_mode: managed\n",
+        )
+        .unwrap();
+        std::env::set_var("MODAL_API_TOKEN", "direct-tok");
+        std::env::set_var("TOOL_GATEWAY_USER_TOKEN", "nous-fallback");
+        let b = ManagedModalBackend::from_env_or_managed().unwrap();
+        assert_eq!(b.transport_label(), "managed");
+        assert_eq!(b.transport.bearer(), "nous-fallback");
+    }
+
+    #[test]
     fn from_env_or_managed_falls_back_to_managed_gateway() {
         let _g = EnvScope::new();
         std::env::set_var("HERMES_ENABLE_NOUS_MANAGED_TOOLS", "1");
@@ -507,7 +533,7 @@ mod managed_modal_tests {
         let _g = EnvScope::new();
         let err = ManagedModalBackend::from_env_or_managed().unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("MODAL_API_TOKEN"), "unexpected: {msg}");
+        assert!(msg.contains("Modal backend"), "unexpected: {msg}");
         assert!(msg.contains("modal"), "unexpected: {msg}");
     }
 
@@ -516,7 +542,7 @@ mod managed_modal_tests {
         let _g = EnvScope::new();
         std::env::set_var("MODAL_API_TOKEN", "   ");
         let err = ManagedModalBackend::from_env_or_managed().unwrap_err();
-        assert!(err.to_string().contains("MODAL_API_TOKEN"));
+        assert!(err.to_string().contains("Modal backend"));
     }
 
     #[test]

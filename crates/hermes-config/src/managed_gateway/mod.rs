@@ -58,6 +58,6 @@ pub use config::{
 pub use resolver::{is_managed_tool_gateway_ready, resolve_managed_tool_gateway, ResolveOptions};
 pub use selection::{
     coerce_modal_mode, env_var_enabled, has_direct_modal_credentials, managed_nous_tools_enabled,
-    resolve_modal_backend_state, resolve_openai_audio_api_key, ModalBackendState, ModalMode,
-    SelectedBackend,
+    prefers_gateway, resolve_modal_backend_state, resolve_openai_audio_api_key, ModalBackendState,
+    ModalMode, SelectedBackend,
 };

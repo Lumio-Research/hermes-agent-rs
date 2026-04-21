@@ -1099,8 +1099,10 @@ name = "hermes-environments"
 version = "0.0.4"
 dependencies = [
  "async-trait",
+ "chrono",
  "hermes-config",
  "hermes-core",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
@@ -1118,6 +1120,7 @@ dependencies = [
  "futures",
  "hermes-agent",
  "hermes-core",
+ "hermes-environments",
  "proptest",
  "reqwest",
  "serde",
@@ -1301,6 +1304,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "url",
  "uuid",
 ]
 

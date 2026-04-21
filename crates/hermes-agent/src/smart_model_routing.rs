@@ -1,6 +1,6 @@
 //! Python `agent.smart_model_routing` parity: cheap-route detection and `resolve_turn_route` structure.
 //!
-//! Baseline: `NousResearch/hermes-agent` tag `v2026.4.13`.
+//! Baseline: `NousResearch/hermes-agent` tag `v2026.4.16`.
 
 use std::collections::HashSet;
 use std::sync::Arc;

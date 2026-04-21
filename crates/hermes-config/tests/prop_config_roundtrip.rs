@@ -12,7 +12,8 @@ use hermes_config::{
     AgentLoopBehaviorConfig, ApprovalConfig, DailyReset, GatewayConfig, IdleReset,
     LlmProviderConfig, PlatformConfig, ProfileConfig, ProxyConfig, SessionConfig,
     SessionResetPolicy, SessionType, SkillsSettings, SmartModelRoutingConfig, StreamingConfig,
-    TerminalBackendType, TerminalConfig, ToolsSettings, UnauthorizedDmBehavior,
+    TerminalBackendType, TerminalConfig, ToolCapabilityConfig, ToolsSettings,
+    UnauthorizedDmBehavior,
 };
 use hermes_core::BudgetConfig;
 
@@ -119,6 +120,10 @@ fn arb_gateway_config() -> impl Strategy<Value = GatewayConfig> {
                 session,
                 streaming,
                 terminal: TerminalConfig::default(),
+                web: ToolCapabilityConfig::default(),
+                image_gen: ToolCapabilityConfig::default(),
+                tts: ToolCapabilityConfig::default(),
+                browser: ToolCapabilityConfig::default(),
                 llm_providers: HashMap::new(),
                 smart_model_routing: SmartModelRoutingConfig::default(),
                 proxy: None,

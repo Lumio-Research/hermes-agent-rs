@@ -79,7 +79,7 @@ pub use tools::voice_mode::VoiceModeHandler;
 pub use tools::web::{WebExtractBackend, WebExtractHandler, WebSearchBackend, WebSearchHandler};
 
 // Re-export real backend implementations
-pub use backends::browser::{CamoFoxBrowserBackend, CdpBrowserBackend};
+pub use backends::browser::{AutoBrowserBackend, CamoFoxBrowserBackend, CdpBrowserBackend};
 pub use backends::clarify::SignalClarifyBackend;
 pub use backends::code_execution::LocalCodeExecutionBackend;
 pub use backends::cronjob::SignalCronjobBackend;

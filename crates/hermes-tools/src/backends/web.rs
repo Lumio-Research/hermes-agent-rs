@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use crate::tools::web::{WebExtractBackend, WebSearchBackend};
 use hermes_config::managed_gateway::{
-    resolve_managed_tool_gateway, ManagedToolGatewayConfig, ResolveOptions,
+    prefers_gateway, resolve_managed_tool_gateway, ManagedToolGatewayConfig, ResolveOptions,
 };
 use hermes_core::ToolError;
 
@@ -372,17 +372,27 @@ impl FirecrawlExtractBackend {
 
     /// Resolve the best-available transport.
     ///
-    /// Priority: direct `FIRECRAWL_API_KEY` → Nous-managed `firecrawl`
-    /// vendor → `Err` with a hint covering both paths.
+    /// Priority: direct `FIRECRAWL_API_KEY` unless `web.use_gateway: true`,
+    /// then Nous-managed `firecrawl` vendor → `Err` with a hint covering both
+    /// paths.
     pub fn from_env_or_managed() -> Result<Self, ToolError> {
+        let force_gateway = prefers_gateway("web");
+        if !force_gateway {
+            if let Ok(api_key) = std::env::var("FIRECRAWL_API_KEY") {
+                let trimmed = api_key.trim();
+                if !trimmed.is_empty() {
+                    return Ok(Self::new(trimmed.to_string()));
+                }
+            }
+        }
+        if let Some(cfg) = resolve_managed_tool_gateway("firecrawl", ResolveOptions::default()) {
+            return Ok(Self::from_managed(&cfg));
+        }
         if let Ok(api_key) = std::env::var("FIRECRAWL_API_KEY") {
             let trimmed = api_key.trim();
             if !trimmed.is_empty() {
                 return Ok(Self::new(trimmed.to_string()));
             }
-        }
-        if let Some(cfg) = resolve_managed_tool_gateway("firecrawl", ResolveOptions::default()) {
-            return Ok(Self::from_managed(&cfg));
         }
         Err(ToolError::ExecutionFailed(
             "FIRECRAWL_API_KEY not set and Nous-managed firecrawl gateway is not configured."
@@ -534,6 +544,20 @@ mod firecrawl_managed_tests {
         let _g = EnvScope::new();
         std::env::remove_var("FIRECRAWL_API_KEY");
         std::env::set_var("HERMES_ENABLE_NOUS_MANAGED_TOOLS", "1");
+        std::env::set_var("TOOL_GATEWAY_USER_TOKEN", "nous-tok");
+        let b = FirecrawlExtractBackend::from_env_or_managed().unwrap();
+        assert_eq!(b.transport_label(), "managed");
+    }
+
+    #[test]
+    fn from_env_or_managed_honors_web_use_gateway() {
+        let _g = EnvScope::new();
+        std::fs::write(
+            std::path::Path::new(&std::env::var("HERMES_HOME").unwrap()).join("config.yaml"),
+            "web:\n  use_gateway: true\n",
+        )
+        .unwrap();
+        std::env::set_var("FIRECRAWL_API_KEY", "direct-key");
         std::env::set_var("TOOL_GATEWAY_USER_TOKEN", "nous-tok");
         let b = FirecrawlExtractBackend::from_env_or_managed().unwrap();
         assert_eq!(b.transport_label(), "managed");

@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 
 use crate::tools::image_gen::ImageGenBackend;
 use hermes_config::managed_gateway::{
-    resolve_managed_tool_gateway, ManagedToolGatewayConfig, ResolveOptions,
+    prefers_gateway, resolve_managed_tool_gateway, ManagedToolGatewayConfig, ResolveOptions,
 };
 use hermes_core::ToolError;
 
@@ -107,17 +107,27 @@ impl FalImageGenBackend {
 
     /// Resolve the best-available transport.
     ///
-    /// Priority: direct `FAL_KEY` → Nous-managed `fal-queue` vendor →
-    /// `Err` with a hint covering both paths.
+    /// Priority: direct `FAL_KEY` unless `image_gen.use_gateway: true`, then
+    /// Nous-managed `fal-queue` vendor → `Err` with a hint covering both
+    /// paths.
     pub fn from_env_or_managed() -> Result<Self, ToolError> {
+        let force_gateway = prefers_gateway("image_gen");
+        if !force_gateway {
+            if let Ok(key) = std::env::var("FAL_KEY") {
+                let trimmed = key.trim();
+                if !trimmed.is_empty() {
+                    return Ok(Self::new(trimmed.to_string()));
+                }
+            }
+        }
+        if let Some(cfg) = resolve_managed_tool_gateway("fal-queue", ResolveOptions::default()) {
+            return Ok(Self::from_managed(&cfg));
+        }
         if let Ok(key) = std::env::var("FAL_KEY") {
             let trimmed = key.trim();
             if !trimmed.is_empty() {
                 return Ok(Self::new(trimmed.to_string()));
             }
-        }
-        if let Some(cfg) = resolve_managed_tool_gateway("fal-queue", ResolveOptions::default()) {
-            return Ok(Self::from_managed(&cfg));
         }
         Err(ToolError::ExecutionFailed(
             "FAL_KEY not set and Nous-managed fal-queue gateway is not configured.".into(),
@@ -277,6 +287,20 @@ mod fal_managed_tests {
     fn from_env_or_managed_falls_back_to_nous_gateway() {
         let _g = EnvScope::new();
         std::env::set_var("HERMES_ENABLE_NOUS_MANAGED_TOOLS", "1");
+        std::env::set_var("TOOL_GATEWAY_USER_TOKEN", "nous-tok");
+        let b = FalImageGenBackend::from_env_or_managed().unwrap();
+        assert_eq!(b.transport_label(), "managed");
+    }
+
+    #[test]
+    fn from_env_or_managed_honors_image_use_gateway() {
+        let _g = EnvScope::new();
+        std::fs::write(
+            std::path::Path::new(&std::env::var("HERMES_HOME").unwrap()).join("config.yaml"),
+            "image_gen:\n  use_gateway: true\n",
+        )
+        .unwrap();
+        std::env::set_var("FAL_KEY", "direct-key");
         std::env::set_var("TOOL_GATEWAY_USER_TOKEN", "nous-tok");
         let b = FalImageGenBackend::from_env_or_managed().unwrap();
         assert_eq!(b.transport_label(), "managed");
