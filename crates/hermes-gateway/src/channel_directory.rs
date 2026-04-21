@@ -38,7 +38,11 @@ pub struct ChannelEntry {
 
 impl ChannelEntry {
     /// Create a new entry from platform + chat_id.
-    pub fn new(platform: impl Into<String>, chat_id: impl Into<String>, name: impl Into<String>) -> Self {
+    pub fn new(
+        platform: impl Into<String>,
+        chat_id: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Self {
         let platform = platform.into();
         let chat_id = chat_id.into();
         let id = format!("{}:{}", platform, chat_id);
@@ -211,7 +215,11 @@ impl ChannelDirectory {
         // Add to channel entry
         if let Ok(mut channels) = self.channels.write() {
             if let Some(entry) = channels.get_mut(channel_id) {
-                if !entry.aliases.iter().any(|a| a.to_lowercase() == alias_lower) {
+                if !entry
+                    .aliases
+                    .iter()
+                    .any(|a| a.to_lowercase() == alias_lower)
+                {
                     entry.aliases.push(alias.to_string());
                 }
             }
@@ -486,9 +494,7 @@ mod tests {
         // Create and populate
         {
             let dir = ChannelDirectory::with_persistence(&path);
-            dir.upsert(
-                ChannelEntry::new("telegram", "1", "Chat A").with_alias("home"),
-            );
+            dir.upsert(ChannelEntry::new("telegram", "1", "Chat A").with_alias("home"));
             dir.upsert(ChannelEntry::new("discord", "2", "Chat B"));
         }
 

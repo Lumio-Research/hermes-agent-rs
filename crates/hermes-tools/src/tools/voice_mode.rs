@@ -305,10 +305,7 @@ async fn transcribe_whisper(wav_bytes: &[u8], config: &SttConfig) -> Result<Stri
         .mime_str("audio/wav")
         .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
-    let model = config
-        .model
-        .as_deref()
-        .unwrap_or("whisper-1");
+    let model = config.model.as_deref().unwrap_or("whisper-1");
 
     let mut form = reqwest::multipart::Form::new()
         .part("file", part)
@@ -328,9 +325,7 @@ async fn transcribe_whisper(wav_bytes: &[u8], config: &SttConfig) -> Result<Stri
 
     if !resp.status().is_success() {
         let body = resp.text().await.unwrap_or_default();
-        return Err(ToolError::ExecutionFailed(format!(
-            "Whisper error: {body}"
-        )));
+        return Err(ToolError::ExecutionFailed(format!("Whisper error: {body}")));
     }
 
     let json: Value = resp
@@ -346,14 +341,10 @@ async fn transcribe_whisper(wav_bytes: &[u8], config: &SttConfig) -> Result<Stri
 }
 
 async fn transcribe_deepgram(wav_bytes: &[u8], config: &SttConfig) -> Result<String, ToolError> {
-    let api_key = std::env::var("DEEPGRAM_API_KEY").map_err(|_| {
-        ToolError::ExecutionFailed("Deepgram STT requires DEEPGRAM_API_KEY".into())
-    })?;
+    let api_key = std::env::var("DEEPGRAM_API_KEY")
+        .map_err(|_| ToolError::ExecutionFailed("Deepgram STT requires DEEPGRAM_API_KEY".into()))?;
 
-    let model = config
-        .model
-        .as_deref()
-        .unwrap_or("nova-2");
+    let model = config.model.as_deref().unwrap_or("nova-2");
 
     // Validate model name to prevent injection
     if !model
@@ -859,9 +850,7 @@ mod tests {
             ..Default::default()
         });
         // Generate a simple sine wave (speech-like)
-        let samples: Vec<f32> = (0..480)
-            .map(|i| (i as f32 * 0.1).sin() * 0.5)
-            .collect();
+        let samples: Vec<f32> = (0..480).map(|i| (i as f32 * 0.1).sin() * 0.5).collect();
         // First frame: not yet enough consecutive
         vad.process_frame(&samples);
         // Second frame: should trigger
@@ -939,30 +928,21 @@ mod tests {
         let handler = VoiceModeHandler::default();
 
         // 1. Enable
-        let out = handler
-            .execute(json!({"action": "enable"}))
-            .await
-            .unwrap();
+        let out = handler.execute(json!({"action": "enable"})).await.unwrap();
         let v: Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["voice_mode"], json!(true));
         assert_eq!(v["status"], "enabled");
         assert!(voice_mode_enabled());
 
         // 2. Status while enabled
-        let out = handler
-            .execute(json!({"action": "status"}))
-            .await
-            .unwrap();
+        let out = handler.execute(json!({"action": "status"})).await.unwrap();
         let v: Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["voice_mode"], json!(true));
         assert!(v.get("stt_provider").is_some());
         assert!(v.get("tts_provider").is_some());
 
         // 3. Disable
-        let out = handler
-            .execute(json!({"action": "disable"}))
-            .await
-            .unwrap();
+        let out = handler.execute(json!({"action": "disable"})).await.unwrap();
         let v: Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["voice_mode"], json!(false));
         assert!(!voice_mode_enabled());
@@ -976,16 +956,10 @@ mod tests {
         assert!(!voice_mode_enabled());
 
         // 6. Explicit enabled param
-        handler
-            .execute(json!({"enabled": true}))
-            .await
-            .unwrap();
+        handler.execute(json!({"enabled": true})).await.unwrap();
         assert!(voice_mode_enabled());
 
-        handler
-            .execute(json!({"enabled": false}))
-            .await
-            .unwrap();
+        handler.execute(json!({"enabled": false})).await.unwrap();
         assert!(!voice_mode_enabled());
 
         // 7. Configure

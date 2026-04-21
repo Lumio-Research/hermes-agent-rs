@@ -178,12 +178,19 @@ mod tests {
             let mut all_keys: Vec<&'static str> = vec!["HERMES_HOME"];
             all_keys.extend_from_slice(keys);
             all_keys.dedup();
-            let original = all_keys.iter().map(|k| (*k, std::env::var(k).ok())).collect();
+            let original = all_keys
+                .iter()
+                .map(|k| (*k, std::env::var(k).ok()))
+                .collect();
             for k in &all_keys {
                 std::env::remove_var(k);
             }
             std::env::set_var("HERMES_HOME", tmp.path());
-            Self { _g: g, _tmp: tmp, original }
+            Self {
+                _g: g,
+                _tmp: tmp,
+                original,
+            }
         }
     }
 

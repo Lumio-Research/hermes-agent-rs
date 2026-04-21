@@ -82,7 +82,6 @@ pub enum MoaStrategy {
     BestOfN,
 }
 
-
 /// Configuration for the MoA pipeline.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoaConfig {
@@ -164,13 +163,7 @@ pub async fn run_mixture_of_agents(
             let max_tok = config.max_tokens;
             async move {
                 let result = backend
-                    .query_model(
-                        &model,
-                        system.as_deref(),
-                        &prompt,
-                        temp,
-                        max_tok,
-                    )
+                    .query_model(&model, system.as_deref(), &prompt, temp, max_tok)
                     .await;
                 (model, result)
             }
@@ -420,10 +413,7 @@ impl MixtureOfAgentsHandler {
 #[async_trait]
 impl ToolHandler for MixtureOfAgentsHandler {
     async fn execute(&self, params: Value) -> Result<String, ToolError> {
-        let prompt = params
-            .get("prompt")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let prompt = params.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
         if prompt.is_empty() {
             return Err(ToolError::InvalidParams("Missing 'prompt'".into()));
         }
@@ -768,20 +758,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_handler_missing_prompt() {
-        let handler = MixtureOfAgentsHandler::new(
-            Arc::new(StubMoaBackend),
-            MoaConfig::default(),
-        );
+        let handler = MixtureOfAgentsHandler::new(Arc::new(StubMoaBackend), MoaConfig::default());
         let err = handler.execute(json!({})).await.unwrap_err();
         assert!(err.to_string().contains("Missing 'prompt'"));
     }
 
     #[tokio::test]
     async fn test_handler_schema() {
-        let handler = MixtureOfAgentsHandler::new(
-            Arc::new(StubMoaBackend),
-            MoaConfig::default(),
-        );
+        let handler = MixtureOfAgentsHandler::new(Arc::new(StubMoaBackend), MoaConfig::default());
         let schema = handler.schema();
         assert_eq!(schema.name, "mixture_of_agents");
         let desc = &schema.description;

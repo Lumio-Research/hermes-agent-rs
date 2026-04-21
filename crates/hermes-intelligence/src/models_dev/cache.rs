@@ -72,16 +72,14 @@ pub fn save(path: &Path, data: &Value) -> std::io::Result<()> {
     }
     // Compact JSON, no separators trailing whitespace — matches Python's
     // `separators=(",", ":"), indent=None` for cache compactness.
-    let bytes =
-        serde_json::to_vec(data).map_err(std::io::Error::other)?;
+    let bytes = serde_json::to_vec(data).map_err(std::io::Error::other)?;
 
     // Same parent dir so rename is on one filesystem and therefore atomic.
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
     let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
     tmp.write_all(&bytes)?;
     tmp.flush()?;
-    tmp.persist(path)
-        .map_err(std::io::Error::other)?;
+    tmp.persist(path).map_err(std::io::Error::other)?;
     Ok(())
 }
 

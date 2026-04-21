@@ -109,8 +109,7 @@ impl EventBridge {
             {
                 let q = self.queue.lock().unwrap();
                 for e in q.iter() {
-                    if e.cursor > after_cursor && session_key.is_none_or(|sk| e.session_key == sk)
-                    {
+                    if e.cursor > after_cursor && session_key.is_none_or(|sk| e.session_key == sk) {
                         return Some(e.clone());
                     }
                 }

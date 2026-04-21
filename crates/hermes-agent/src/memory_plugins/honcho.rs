@@ -272,8 +272,7 @@ impl MemoryProviderPlugin for HonchoMemoryPlugin {
 
     fn queue_prefetch(&self, _query: &str, _session_id: &str) {
         let mode = self.recall_mode.lock().unwrap().clone();
-        if mode == "tools" {
-        }
+        if mode == "tools" {}
         // Placeholder: real implementation would spawn background thread
         // calling dialectic_query and storing result in prefetch_result
     }

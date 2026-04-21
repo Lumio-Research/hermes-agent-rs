@@ -27,10 +27,7 @@ fn set_extra(pc: &mut PlatformConfig, key: &str, val: Value) {
 }
 
 fn apply_weixin_env(config: &mut GatewayConfig) {
-    let wx = config
-        .platforms
-        .entry("weixin".into())
-        .or_default();
+    let wx = config.platforms.entry("weixin".into()).or_default();
 
     if let Some(t) = env_nonempty("WEIXIN_TOKEN") {
         wx.token = Some(t);
@@ -71,10 +68,7 @@ fn apply_weixin_env(config: &mut GatewayConfig) {
 }
 
 fn apply_dingtalk_env(config: &mut GatewayConfig) {
-    let dt = config
-        .platforms
-        .entry("dingtalk".into())
-        .or_default();
+    let dt = config.platforms.entry("dingtalk".into()).or_default();
 
     if let Some(v) = env_nonempty("DINGTALK_CLIENT_ID") {
         set_extra(dt, "client_id", json!(v));

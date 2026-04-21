@@ -265,7 +265,10 @@ mod tests {
         let backend = GatewayMessagingBackend::new(|_platform, _chat_id, _message| {
             Box::pin(async { Err("connection refused".to_string()) })
         });
-        let err = backend.send("telegram", "12345", "hello").await.unwrap_err();
+        let err = backend
+            .send("telegram", "12345", "hello")
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("connection refused"));
     }
 

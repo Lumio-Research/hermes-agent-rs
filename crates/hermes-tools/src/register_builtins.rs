@@ -442,10 +442,12 @@ pub fn register_builtin_tools(
     reg(
         registry,
         "mixture_of_agents",
-        Arc::new(crate::tools::mixture_of_agents::MixtureOfAgentsHandler::new(
-            Arc::new(crate::tools::mixture_of_agents::StubMoaBackend),
-            crate::tools::mixture_of_agents::MoaConfig::default(),
-        )),
+        Arc::new(
+            crate::tools::mixture_of_agents::MixtureOfAgentsHandler::new(
+                Arc::new(crate::tools::mixture_of_agents::StubMoaBackend),
+                crate::tools::mixture_of_agents::MoaConfig::default(),
+            ),
+        ),
         "🤖",
         vec![],
     );

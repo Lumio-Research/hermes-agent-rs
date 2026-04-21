@@ -164,10 +164,16 @@ pub trait HermesBaseEnv: Send + Sync {
     async fn load_tasks(&self) -> Result<Vec<EnvTask>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Set up the environment for a specific task (e.g. clone repo, start Docker).
-    async fn setup_task(&self, task: &EnvTask) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn setup_task(
+        &self,
+        task: &EnvTask,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     /// Tear down the environment after a task.
-    async fn teardown_task(&self, task: &EnvTask) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn teardown_task(
+        &self,
+        task: &EnvTask,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     /// Verify the agent's output for a task.
     async fn verify(

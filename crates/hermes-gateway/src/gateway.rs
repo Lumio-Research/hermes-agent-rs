@@ -175,8 +175,7 @@ struct UsageStats {
     last_updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 struct SessionRuntimeState {
     model: Option<String>,
     provider: Option<String>,
@@ -190,7 +189,6 @@ struct SessionRuntimeState {
     yolo: bool,
     reasoning: bool,
 }
-
 
 // ---------------------------------------------------------------------------
 // Gateway
@@ -450,9 +448,10 @@ impl Gateway {
 
         // Slash commands are executed directly by the gateway command runtime.
         if incoming.text.trim_start().starts_with('/')
-            && self.execute_slash_command(incoming, &session_key).await? {
-                return Ok(());
-            }
+            && self.execute_slash_command(incoming, &session_key).await?
+        {
+            return Ok(());
+        }
 
         let enriched_text = self
             .enrich_message_with_transcription(&self.enrich_message_with_vision(&incoming.text));

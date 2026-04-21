@@ -72,20 +72,20 @@ impl ReferenceIndex {
         let value = value.into();
         let kind_key = format!("{:?}", kind).to_lowercase();
 
-        let entry = self.references.entry(value.clone()).or_insert_with(|| Reference {
-            kind,
-            value: value.clone(),
-            first_seen: message_idx,
-            last_seen: message_idx,
-            count: 0,
-        });
+        let entry = self
+            .references
+            .entry(value.clone())
+            .or_insert_with(|| Reference {
+                kind,
+                value: value.clone(),
+                first_seen: message_idx,
+                last_seen: message_idx,
+                count: 0,
+            });
         entry.last_seen = message_idx;
         entry.count += 1;
 
-        self.by_kind
-            .entry(kind_key)
-            .or_default()
-            .insert(value);
+        self.by_kind.entry(kind_key).or_default().insert(value);
     }
 
     /// Get all references of a specific kind.
@@ -183,21 +183,12 @@ pub struct ReferenceExtractor {
 impl ReferenceExtractor {
     pub fn new() -> Self {
         Self {
-            file_path_re: Regex::new(
-                r#"(?:^|[\s`"'(])(/[\w./-]{2,}|~/[\w./-]+|\.{1,2}/[\w./-]+)"#
-            ).unwrap(),
-            url_re: Regex::new(
-                r#"https?://[^\s<>"')\]]+[^\s<>"')\].,;:!?]"#
-            ).unwrap(),
-            env_var_re: Regex::new(
-                r"\$\{?([A-Z][A-Z0-9_]{2,})\}?"
-            ).unwrap(),
-            git_ref_re: Regex::new(
-                r"\b([0-9a-f]{7,40})\b"
-            ).unwrap(),
-            ip_re: Regex::new(
-                r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b"
-            ).unwrap(),
+            file_path_re: Regex::new(r#"(?:^|[\s`"'(])(/[\w./-]{2,}|~/[\w./-]+|\.{1,2}/[\w./-]+)"#)
+                .unwrap(),
+            url_re: Regex::new(r#"https?://[^\s<>"')\]]+[^\s<>"')\].,;:!?]"#).unwrap(),
+            env_var_re: Regex::new(r"\$\{?([A-Z][A-Z0-9_]{2,})\}?").unwrap(),
+            git_ref_re: Regex::new(r"\b([0-9a-f]{7,40})\b").unwrap(),
+            ip_re: Regex::new(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b").unwrap(),
         }
     }
 
@@ -231,10 +222,7 @@ impl ReferenceExtractor {
             if let Some(m) = cap.get(1) {
                 let ip = m.as_str();
                 // Validate IP ranges
-                let parts: Vec<u8> = ip
-                    .split('.')
-                    .filter_map(|p| p.parse().ok())
-                    .collect();
+                let parts: Vec<u8> = ip.split('.').filter_map(|p| p.parse().ok()).collect();
                 if parts.len() == 4 {
                     index.add(ReferenceKind::IpAddress, ip, message_idx);
                 }
@@ -243,10 +231,7 @@ impl ReferenceExtractor {
     }
 
     /// Extract references from a sequence of messages.
-    pub fn extract_from_messages(
-        &self,
-        messages: &[impl AsRef<str>],
-    ) -> ReferenceIndex {
+    pub fn extract_from_messages(&self, messages: &[impl AsRef<str>]) -> ReferenceIndex {
         let mut index = ReferenceIndex::new();
         for (i, msg) in messages.iter().enumerate() {
             self.extract(msg.as_ref(), i, &mut index);
@@ -297,7 +282,11 @@ mod tests {
     fn extract_urls() {
         let extractor = ReferenceExtractor::new();
         let mut index = ReferenceIndex::new();
-        extractor.extract("Visit https://example.com/page and http://localhost:8080", 0, &mut index);
+        extractor.extract(
+            "Visit https://example.com/page and http://localhost:8080",
+            0,
+            &mut index,
+        );
 
         let urls = index.get_by_kind(ReferenceKind::Url);
         assert_eq!(urls.len(), 2);
@@ -342,7 +331,11 @@ mod tests {
     fn index_summary() {
         let extractor = ReferenceExtractor::new();
         let mut index = ReferenceIndex::new();
-        extractor.extract("Edit /etc/hosts and visit https://example.com", 0, &mut index);
+        extractor.extract(
+            "Edit /etc/hosts and visit https://example.com",
+            0,
+            &mut index,
+        );
 
         let summary = index.summary();
         assert!(summary.contains("/etc/hosts"));

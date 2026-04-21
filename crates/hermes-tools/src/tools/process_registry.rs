@@ -278,9 +278,9 @@ impl ProcessManager {
         tail_bytes: Option<usize>,
     ) -> Result<String, ToolError> {
         let procs = self.processes.lock().await;
-        let proc = procs.get(name).ok_or_else(|| {
-            ToolError::ExecutionFailed(format!("No process named '{name}'"))
-        })?;
+        let proc = procs
+            .get(name)
+            .ok_or_else(|| ToolError::ExecutionFailed(format!("No process named '{name}'")))?;
 
         let buf = match stream {
             "stderr" => &proc.stderr_buf,
@@ -295,15 +295,11 @@ impl ProcessManager {
     }
 
     /// Gracefully stop a process: SIGTERM → wait → SIGKILL.
-    pub async fn stop(
-        &self,
-        name: &str,
-        timeout: Duration,
-    ) -> Result<ProcessInfo, ToolError> {
+    pub async fn stop(&self, name: &str, timeout: Duration) -> Result<ProcessInfo, ToolError> {
         let mut procs = self.processes.lock().await;
-        let proc = procs.get_mut(name).ok_or_else(|| {
-            ToolError::ExecutionFailed(format!("No process named '{name}'"))
-        })?;
+        let proc = procs
+            .get_mut(name)
+            .ok_or_else(|| ToolError::ExecutionFailed(format!("No process named '{name}'")))?;
 
         if proc.info.status != ProcessStatus::Running {
             return Ok(proc.info.clone());
@@ -337,7 +333,10 @@ impl ProcessManager {
                 }
                 Err(_) => {
                     // Timeout: force kill
-                    tracing::warn!(name = name, "Process did not stop gracefully, sending SIGKILL");
+                    tracing::warn!(
+                        name = name,
+                        "Process did not stop gracefully, sending SIGKILL"
+                    );
                     let _ = child.kill().await;
                     if let Ok(status) = child.wait().await {
                         proc.info.exit_code = status.code();
@@ -401,7 +400,10 @@ async fn refresh_status(proc: &mut ManagedProcess) {
 }
 
 /// Background task to capture output from a reader into a ring buffer.
-async fn capture_output<R: tokio::io::AsyncRead + Unpin>(mut reader: R, buf: Arc<Mutex<RingBuffer>>) {
+async fn capture_output<R: tokio::io::AsyncRead + Unpin>(
+    mut reader: R,
+    buf: Arc<Mutex<RingBuffer>>,
+) {
     let mut chunk = [0u8; 8192];
     loop {
         match reader.read(&mut chunk).await {
@@ -460,19 +462,13 @@ impl ToolHandler for ProcessRegistryHandler {
                 let args: Vec<&str> = params
                     .get("args")
                     .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str())
-                            .collect()
-                    })
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
                     .unwrap_or_default();
 
                 let working_dir = params.get("working_dir").and_then(|v| v.as_str());
 
-                let env_vars: Option<HashMap<String, String>> = params
-                    .get("env")
-                    .and_then(|v| v.as_object())
-                    .map(|obj| {
+                let env_vars: Option<HashMap<String, String>> =
+                    params.get("env").and_then(|v| v.as_object()).map(|obj| {
                         obj.iter()
                             .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
                             .collect()
@@ -567,10 +563,7 @@ impl ToolHandler for ProcessRegistryHandler {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| ToolError::InvalidParams("Missing 'name'".into()))?;
 
-                let timeout_secs = params
-                    .get("timeout")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(5);
+                let timeout_secs = params.get("timeout").and_then(|v| v.as_u64()).unwrap_or(5);
 
                 let info = self
                     .manager
@@ -598,9 +591,7 @@ impl ToolHandler for ProcessRegistryHandler {
                 })?;
 
                 // Stop the process
-                self.manager
-                    .stop(name, Duration::from_secs(5))
-                    .await?;
+                self.manager.stop(name, Duration::from_secs(5)).await?;
 
                 // Remove the old entry
                 self.manager.remove(name).await;
@@ -832,10 +823,7 @@ mod tests {
             .await
             .unwrap();
 
-        let info = mgr
-            .stop("sleeper", Duration::from_secs(2))
-            .await
-            .unwrap();
+        let info = mgr.stop("sleeper", Duration::from_secs(2)).await.unwrap();
         assert_eq!(info.status, ProcessStatus::Stopped);
         assert!(info.stopped_at.is_some());
     }
@@ -863,7 +851,9 @@ mod tests {
 
         // Process should have exited
         let list = mgr.list().await;
-        assert!(list[0].status == ProcessStatus::Exited || list[0].status == ProcessStatus::Running);
+        assert!(
+            list[0].status == ProcessStatus::Exited || list[0].status == ProcessStatus::Running
+        );
 
         // If still running, stop it first
         if list[0].status == ProcessStatus::Running {

@@ -57,9 +57,7 @@ pub fn resolve_channel(
 ) -> Result<ResolvedChannel, ToolError> {
     let trimmed = channel_ref.trim();
     if trimmed.is_empty() {
-        return Err(ToolError::InvalidParams(
-            "Empty channel reference".into(),
-        ));
+        return Err(ToolError::InvalidParams("Empty channel reference".into()));
     }
 
     // Try platform:id format
@@ -85,7 +83,11 @@ pub fn resolve_channel(
     }
 
     // Phone number detection
-    if trimmed.starts_with('+') && trimmed[1..].chars().all(|c| c.is_ascii_digit() || c == '-' || c == ' ') {
+    if trimmed.starts_with('+')
+        && trimmed[1..]
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '-' || c == ' ')
+    {
         return Ok(ResolvedChannel {
             platform: "sms".into(),
             chat_id: trimmed.to_string(),
@@ -455,9 +457,7 @@ impl ToolHandler for SendMessageHandler {
             let recipient = params
                 .get("recipient")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    ToolError::InvalidParams("Missing 'recipient' parameter".into())
-                })?;
+                .ok_or_else(|| ToolError::InvalidParams("Missing 'recipient' parameter".into()))?;
             ResolvedChannel {
                 platform: platform.to_lowercase(),
                 chat_id: recipient.to_string(),
@@ -590,10 +590,7 @@ impl ToolHandler for SendMessageHandler {
              Supports Telegram, Discord, Slack, WhatsApp, Signal, Email, SMS, Matrix, \
              and more. Long messages are automatically split at safe markdown boundaries. \
              Failed deliveries are retried and can fall back to an alternate platform.",
-            JsonSchema::object(
-                props,
-                vec!["message".into()],
-            ),
+            JsonSchema::object(props, vec!["message".into()]),
         )
     }
 }
@@ -787,7 +784,10 @@ mod tests {
                     "Simulated failure #{n}"
                 )));
             }
-            Ok(json!({"status": "delivered", "platform": platform, "recipient": recipient}).to_string())
+            Ok(
+                json!({"status": "delivered", "platform": platform, "recipient": recipient})
+                    .to_string(),
+            )
         }
     }
 
@@ -871,7 +871,11 @@ mod tests {
             .execute(json!({"message": "hello"}))
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("platform") || err.to_string().contains("recipient") || err.to_string().contains("channel"));
+        assert!(
+            err.to_string().contains("platform")
+                || err.to_string().contains("recipient")
+                || err.to_string().contains("channel")
+        );
     }
 
     #[tokio::test]

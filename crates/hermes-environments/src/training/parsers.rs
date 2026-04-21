@@ -87,7 +87,9 @@ fn parse_hermes(text: &str) -> Vec<ParsedToolCall> {
             let content = text[abs_start..abs_end].trim();
             if let Some(call) = parse_json_tool_call(content) {
                 calls.push(ParsedToolCall {
-                    raw_span: Some(text[search_from + start..abs_end + close_tag.len()].to_string()),
+                    raw_span: Some(
+                        text[search_from + start..abs_end + close_tag.len()].to_string(),
+                    ),
                     ..call
                 });
             }
@@ -107,9 +109,8 @@ fn parse_anthropic(text: &str) -> Vec<ParsedToolCall> {
     let mut calls = Vec::new();
 
     // Pattern 1: <invoke name="tool_name">{"key":"value"}</invoke>
-    let invoke_re = regex::Regex::new(
-        r#"<invoke\s+name="([^"]+)"[^>]*>([\s\S]*?)</invoke>"#
-    ).unwrap();
+    let invoke_re =
+        regex::Regex::new(r#"<invoke\s+name="([^"]+)"[^>]*>([\s\S]*?)</invoke>"#).unwrap();
     for cap in invoke_re.captures_iter(text) {
         let name = cap[1].to_string();
         let body = cap[2].trim();
@@ -124,8 +125,9 @@ fn parse_anthropic(text: &str) -> Vec<ParsedToolCall> {
     // Pattern 2: <tool_use><name>tool_name</name><input>{...}</input></tool_use>
     if calls.is_empty() {
         let tool_use_re = regex::Regex::new(
-            r#"<tool_use>\s*<name>([^<]+)</name>\s*<input>([\s\S]*?)</input>\s*</tool_use>"#
-        ).unwrap();
+            r#"<tool_use>\s*<name>([^<]+)</name>\s*<input>([\s\S]*?)</input>\s*</tool_use>"#,
+        )
+        .unwrap();
         for cap in tool_use_re.captures_iter(text) {
             let name = cap[1].trim().to_string();
             let body = cap[2].trim();
@@ -151,8 +153,9 @@ fn parse_openai_text(text: &str) -> Vec<ParsedToolCall> {
     // Pattern: {"function_call": {"name": "...", "arguments": "..."}}
     // or: {"name": "...", "arguments": {...}}
     let re = regex::Regex::new(
-        r#"\{[^{}]*"name"\s*:\s*"([^"]+)"[^{}]*"arguments"\s*:\s*(\{[^}]*\}|"[^"]*")[^{}]*\}"#
-    ).unwrap();
+        r#"\{[^{}]*"name"\s*:\s*"([^"]+)"[^{}]*"arguments"\s*:\s*(\{[^}]*\}|"[^"]*")[^{}]*\}"#,
+    )
+    .unwrap();
 
     for cap in re.captures_iter(text) {
         let name = cap[1].to_string();
@@ -182,9 +185,8 @@ fn parse_qwen(text: &str) -> Vec<ParsedToolCall> {
     let mut calls = Vec::new();
 
     // Pattern 1: ✿FUNCTION✿: tool_name\n✿ARGS✿: {...}\n✿RESULT✿
-    let qwen_re = regex::Regex::new(
-        r"✿FUNCTION✿:\s*(\S+)\s*\n✿ARGS✿:\s*([\s\S]*?)(?:\n✿RESULT✿|$)"
-    ).unwrap();
+    let qwen_re =
+        regex::Regex::new(r"✿FUNCTION✿:\s*(\S+)\s*\n✿ARGS✿:\s*([\s\S]*?)(?:\n✿RESULT✿|$)").unwrap();
     for cap in qwen_re.captures_iter(text) {
         let name = cap[1].trim().to_string();
         let body = cap[2].trim();
@@ -212,9 +214,7 @@ fn parse_llama(text: &str) -> Vec<ParsedToolCall> {
     let mut calls = Vec::new();
 
     // Pattern 1: <function=tool_name>{"key":"value"}</function>
-    let func_re = regex::Regex::new(
-        r#"<function=(\w+)>([\s\S]*?)</function>"#
-    ).unwrap();
+    let func_re = regex::Regex::new(r#"<function=(\w+)>([\s\S]*?)</function>"#).unwrap();
     for cap in func_re.captures_iter(text) {
         let name = cap[1].to_string();
         let body = cap[2].trim();
@@ -228,9 +228,7 @@ fn parse_llama(text: &str) -> Vec<ParsedToolCall> {
 
     // Pattern 2: [TOOL_CALL] {"name":"...","arguments":{...}} [/TOOL_CALL]
     if calls.is_empty() {
-        let tool_re = regex::Regex::new(
-            r"\[TOOL_CALL\]\s*([\s\S]*?)\s*\[/TOOL_CALL\]"
-        ).unwrap();
+        let tool_re = regex::Regex::new(r"\[TOOL_CALL\]\s*([\s\S]*?)\s*\[/TOOL_CALL\]").unwrap();
         for cap in tool_re.captures_iter(text) {
             let content = cap[1].trim();
             if let Some(call) = parse_json_tool_call(content) {
@@ -283,7 +281,6 @@ fn parse_json_tool_call(json_str: &str) -> Option<ParsedToolCall> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn hermes_single_tool_call() {
@@ -314,7 +311,8 @@ mod tests {
 
     #[test]
     fn anthropic_tool_use_format() {
-        let text = r#"<tool_use><name>read_file</name><input>{"path": "/etc/hosts"}</input></tool_use>"#;
+        let text =
+            r#"<tool_use><name>read_file</name><input>{"path": "/etc/hosts"}</input></tool_use>"#;
         let calls = parse_tool_calls(text, ParserKind::Anthropic);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "read_file");

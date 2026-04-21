@@ -13,9 +13,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use super::super::{
-    load_hf_dataset_via_python, EnvTask, HermesBaseEnv, Trajectory,
-};
+use super::super::{load_hf_dataset_via_python, EnvTask, HermesBaseEnv, Trajectory};
 
 /// SWE-bench task metadata (matches HuggingFace dataset columns).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,7 +103,10 @@ impl SweBenchEnv {
     }
 
     /// Clone the repo and checkout the base commit for a task.
-    async fn setup_repo(&self, task: &SweBenchTask) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    async fn setup_repo(
+        &self,
+        task: &SweBenchTask,
+    ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
         let repo_dir = self.config.work_dir.join(&task.instance_id);
         if repo_dir.exists() {
             tokio::fs::remove_dir_all(&repo_dir).await?;
@@ -116,7 +117,13 @@ impl SweBenchEnv {
 
         // Shallow clone + checkout base commit
         let output = tokio::process::Command::new("git")
-            .args(["clone", "--depth", "50", &repo_url, repo_dir.to_str().unwrap()])
+            .args([
+                "clone",
+                "--depth",
+                "50",
+                &repo_url,
+                repo_dir.to_str().unwrap(),
+            ])
             .output()
             .await?;
 
@@ -237,7 +244,10 @@ impl HermesBaseEnv for SweBenchEnv {
         Ok(tasks)
     }
 
-    async fn setup_task(&self, task: &EnvTask) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn setup_task(
+        &self,
+        task: &EnvTask,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(gt) = &task.ground_truth {
             let swe_task: SweBenchTask = serde_json::from_value(gt.clone())?;
             self.setup_repo(&swe_task).await?;
@@ -245,7 +255,10 @@ impl HermesBaseEnv for SweBenchEnv {
         Ok(())
     }
 
-    async fn teardown_task(&self, task: &EnvTask) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn teardown_task(
+        &self,
+        task: &EnvTask,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let repo_dir = self.config.work_dir.join(&task.task_id);
         if repo_dir.exists() {
             tokio::fs::remove_dir_all(&repo_dir).await?;

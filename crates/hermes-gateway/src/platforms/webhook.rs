@@ -275,7 +275,13 @@ async fn handle_webhook_request(
     let signature = request
         .lines()
         .find(|l| l.to_lowercase().starts_with("x-signature:"))
-        .map(|l| l.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string())
+        .map(|l| {
+            l.split_once(':')
+                .map(|x| x.1)
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        })
         .unwrap_or_default();
 
     if method == "POST" && path == expected_path {

@@ -457,12 +457,13 @@ fn convert_content_part(part: &Value) -> Option<AnthropicContentBlock> {
                 source: image_source_from_openai_url(url),
             })
         }
-        _ => {
-            part.get("text").and_then(|t| t.as_str()).map(|text| AnthropicContentBlock::Text {
-                    text: text.to_string(),
-                    cache_control: part.get("cache_control").cloned(),
-                })
-        }
+        _ => part
+            .get("text")
+            .and_then(|t| t.as_str())
+            .map(|text| AnthropicContentBlock::Text {
+                text: text.to_string(),
+                cache_control: part.get("cache_control").cloned(),
+            }),
     }
 }
 

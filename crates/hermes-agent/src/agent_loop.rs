@@ -2009,11 +2009,11 @@ impl AgentLoop {
         }
         if !matches!(api_mode, ApiMode::CodexResponses)
             && body.get("strict_tool_calls").is_none()
-                && body.get("strict_api").is_none()
-                && body.get("provider_strict").is_none()
-            {
-                body["strict_api"] = Value::Bool(true);
-            }
+            && body.get("strict_api").is_none()
+            && body.get("provider_strict").is_none()
+        {
+            body["strict_api"] = Value::Bool(true);
+        }
         Some(body)
     }
 
@@ -2426,7 +2426,8 @@ impl AgentLoop {
         let persist_user_idx = if self.config.persist_user_message.is_some() {
             ctx.get_messages()
                 .iter()
-                .enumerate().rfind(|(_, m)| m.role == MessageRole::User)
+                .enumerate()
+                .rfind(|(_, m)| m.role == MessageRole::User)
                 .map(|(i, _)| i)
         } else {
             None
@@ -2449,7 +2450,8 @@ impl AgentLoop {
         // Memory prefetch for first user message
         let first_user = ctx
             .get_messages()
-            .iter().rfind(|m| matches!(m.role, hermes_core::MessageRole::User))
+            .iter()
+            .rfind(|m| matches!(m.role, hermes_core::MessageRole::User))
             .and_then(|m| m.content.clone())
             .unwrap_or_default();
         let mem_ctx_raw = self.memory_prefetch(&first_user, session_id);
@@ -3137,7 +3139,8 @@ impl AgentLoop {
         let persist_user_idx = if self.config.persist_user_message.is_some() {
             ctx.get_messages()
                 .iter()
-                .enumerate().rfind(|(_, m)| m.role == MessageRole::User)
+                .enumerate()
+                .rfind(|(_, m)| m.role == MessageRole::User)
                 .map(|(i, _)| i)
         } else {
             None
@@ -3160,7 +3163,8 @@ impl AgentLoop {
         // Memory prefetch
         let first_user = ctx
             .get_messages()
-            .iter().rfind(|m| matches!(m.role, hermes_core::MessageRole::User))
+            .iter()
+            .rfind(|m| matches!(m.role, hermes_core::MessageRole::User))
             .and_then(|m| m.content.clone())
             .unwrap_or_default();
         let mem_ctx_raw = self.memory_prefetch(&first_user, session_id);

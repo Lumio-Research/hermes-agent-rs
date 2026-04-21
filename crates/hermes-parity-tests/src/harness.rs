@@ -9,11 +9,11 @@ use hermes_intelligence::anthropic_adapter::{
     common_betas_for_base_url, default_anthropic_beta_list, fast_mode_request_beta_list,
     is_oauth_token, normalize_model_name, sanitize_tool_id,
 };
+use hermes_intelligence::usage_pricing::resolve_billing_route;
 use hermes_intelligence::{
     estimate_tokens_rough, get_model_context_length, infer_provider_from_url, supports_tools,
     supports_vision, ErrorCategory, ErrorClassifier, RetryStrategy,
 };
-use hermes_intelligence::usage_pricing::resolve_billing_route;
 use hermes_tools::approval::{check_approval, ApprovalDecision};
 use hermes_tools::v4a_patch::{parse_v4a_patch, OperationType};
 use serde::{Deserialize, Serialize};
@@ -313,16 +313,13 @@ pub fn dispatch_case(op: &str, input: &Value) -> Result<Value, String> {
                 .get("error_type")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| "missing input.error_type".to_string())?;
-            let message = input
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let retry_after = input
-                .get("retry_after_secs")
-                .and_then(|v| v.as_u64());
+            let message = input.get("message").and_then(|v| v.as_str()).unwrap_or("");
+            let retry_after = input.get("retry_after_secs").and_then(|v| v.as_u64());
 
             let error = match error_type {
-                "RateLimited" => hermes_core::AgentError::RateLimited { retry_after_secs: retry_after },
+                "RateLimited" => hermes_core::AgentError::RateLimited {
+                    retry_after_secs: retry_after,
+                },
                 "AuthFailed" => hermes_core::AgentError::AuthFailed(message.to_string()),
                 "ContextTooLong" => hermes_core::AgentError::ContextTooLong,
                 "Timeout" => hermes_core::AgentError::Timeout(message.to_string()),
@@ -414,7 +411,8 @@ mod tests {
 
     #[test]
     fn parity_model_metadata_fixtures() {
-        run_fixtures_in_dir(&fixtures_dir().join("model_metadata")).expect("model_metadata fixtures");
+        run_fixtures_in_dir(&fixtures_dir().join("model_metadata"))
+            .expect("model_metadata fixtures");
     }
 
     #[test]
@@ -434,7 +432,8 @@ mod tests {
 
     #[test]
     fn parity_error_classifier_fixtures() {
-        run_fixtures_in_dir(&fixtures_dir().join("error_classifier")).expect("error_classifier fixtures");
+        run_fixtures_in_dir(&fixtures_dir().join("error_classifier"))
+            .expect("error_classifier fixtures");
     }
 
     #[test]

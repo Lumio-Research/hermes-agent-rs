@@ -387,7 +387,13 @@ async fn handle_connection(
     let auth_header = request
         .lines()
         .find(|l| l.to_lowercase().starts_with("authorization:"))
-        .map(|l| l.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string());
+        .map(|l| {
+            l.split_once(':')
+                .map(|x| x.1)
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        });
 
     if let Some(ref expected) = auth_token {
         let valid = auth_header

@@ -9,11 +9,9 @@ use proptest::prelude::*;
 use std::collections::HashMap;
 
 use hermes_config::{
-    AgentLoopBehaviorConfig, ApprovalConfig, DailyReset, GatewayConfig, IdleReset,
-    PlatformConfig, ProfileConfig, SessionConfig,
-    SessionResetPolicy, SkillsSettings, SmartModelRoutingConfig, StreamingConfig,
-    TerminalConfig, ToolCapabilityConfig, ToolsSettings,
-    UnauthorizedDmBehavior,
+    AgentLoopBehaviorConfig, ApprovalConfig, DailyReset, GatewayConfig, IdleReset, PlatformConfig,
+    ProfileConfig, SessionConfig, SessionResetPolicy, SkillsSettings, SmartModelRoutingConfig,
+    StreamingConfig, TerminalConfig, ToolCapabilityConfig, ToolsSettings, UnauthorizedDmBehavior,
 };
 use hermes_core::BudgetConfig;
 

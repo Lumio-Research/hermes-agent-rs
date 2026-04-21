@@ -216,8 +216,7 @@ impl MemoryProviderPlugin for Mem0MemoryPlugin {
     }
 
     fn queue_prefetch(&self, _query: &str, _session_id: &str) {
-        if self.is_breaker_open() {
-        }
+        if self.is_breaker_open() {}
         // Placeholder: real implementation would call Mem0 search API
         // in a background thread and store result in prefetch_result
     }

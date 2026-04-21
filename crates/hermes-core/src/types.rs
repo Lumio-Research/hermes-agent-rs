@@ -90,7 +90,9 @@ impl ReasoningContent {
                 format: ReasoningFormat::Simple,
             }),
             serde_json::Value::Object(map) => {
-                map.get("text").and_then(|v| v.as_str()).map(|text| ReasoningContent {
+                map.get("text")
+                    .and_then(|v| v.as_str())
+                    .map(|text| ReasoningContent {
                         text: text.to_string(),
                         format: ReasoningFormat::Details,
                     })

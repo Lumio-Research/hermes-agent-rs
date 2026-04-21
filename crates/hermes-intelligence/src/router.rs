@@ -178,8 +178,7 @@ impl SmartModelRouter {
             })
         };
 
-        best
-            .map(|m| m.name.clone())
+        best.map(|m| m.name.clone())
             .ok_or(RouterError::NoModelMatched)
     }
 

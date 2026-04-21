@@ -86,7 +86,6 @@ pub enum ApiMode {
     CodexResponses,
 }
 
-
 /// Cheap route target details for smart per-turn routing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheapModelRouteConfig {

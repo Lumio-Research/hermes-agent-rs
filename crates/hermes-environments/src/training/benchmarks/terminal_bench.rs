@@ -148,7 +148,10 @@ impl HermesBaseEnv for TerminalBenchEnv {
         Ok(tasks)
     }
 
-    async fn setup_task(&self, task: &EnvTask) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn setup_task(
+        &self,
+        task: &EnvTask,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let task_dir = self.config.work_dir.join(&task.task_id);
         tokio::fs::create_dir_all(&task_dir).await?;
 
@@ -169,7 +172,10 @@ impl HermesBaseEnv for TerminalBenchEnv {
         Ok(())
     }
 
-    async fn teardown_task(&self, task: &EnvTask) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn teardown_task(
+        &self,
+        task: &EnvTask,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let task_dir = self.config.work_dir.join(&task.task_id);
         if task_dir.exists() {
             tokio::fs::remove_dir_all(&task_dir).await?;

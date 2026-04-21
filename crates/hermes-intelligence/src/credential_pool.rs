@@ -42,7 +42,6 @@ pub enum PoolStrategy {
     LeastUsed,
 }
 
-
 impl PoolStrategy {
     pub fn from_str_loose(s: &str) -> Self {
         match s.trim().to_lowercase().as_str() {

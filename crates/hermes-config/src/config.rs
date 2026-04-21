@@ -206,8 +206,7 @@ fn default_tools() -> Vec<String> {
 // ---------------------------------------------------------------------------
 
 /// Configuration for a named LLM provider endpoint.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LlmProviderConfig {
     /// API key (or env-var reference like "${MY_API_KEY}").
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -259,7 +258,6 @@ pub struct LlmProviderConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oauth_client_id: Option<String>,
 }
-
 
 // ---------------------------------------------------------------------------
 // SmartModelRoutingConfig
@@ -338,7 +336,6 @@ pub enum TerminalBackendType {
     Singularity,
 }
 
-
 /// Configuration for terminal/command-execution backends.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TerminalConfig {
@@ -388,8 +385,7 @@ fn default_max_output_size() -> usize {
 // ---------------------------------------------------------------------------
 
 /// Approval / safety-gate settings for dangerous operations.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ApprovalConfig {
     /// Whether the approval gate is enabled.
     #[serde(default)]
@@ -407,7 +403,6 @@ pub struct ApprovalConfig {
     #[serde(default)]
     pub whitelist_commands: Vec<String>,
 }
-
 
 /// Shared shape for tool-capability routing config copied from Python's
 /// `config.yaml` sections such as `web`, `tts`, `image_gen`, and `browser`.
@@ -471,8 +466,7 @@ pub struct ProfileConfig {
 // ---------------------------------------------------------------------------
 
 /// HTTP/SOCKS proxy settings.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProxyConfig {
     /// HTTP proxy URL (e.g. "http://proxy:8080").
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -482,7 +476,6 @@ pub struct ProxyConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub socks_proxy: Option<String>,
 }
-
 
 // ---------------------------------------------------------------------------
 // Tests

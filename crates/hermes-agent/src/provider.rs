@@ -1517,14 +1517,14 @@ fn parse_sse_chunk(json: &Value) -> Option<StreamChunk> {
 
     // Usage may appear in the final chunk
     let usage = json.get("usage").map(|u| UsageStats {
-            prompt_tokens: u.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
-            completion_tokens: u
-                .get("completion_tokens")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0),
-            total_tokens: u.get("total_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
-            estimated_cost: None,
-        });
+        prompt_tokens: u.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+        completion_tokens: u
+            .get("completion_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+        total_tokens: u.get("total_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+        estimated_cost: None,
+    });
 
     Some(StreamChunk {
         delta,

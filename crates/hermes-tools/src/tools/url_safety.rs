@@ -48,7 +48,6 @@ pub enum PolicyAction {
     Warn,
 }
 
-
 /// A single policy rule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyRule {
@@ -140,9 +139,7 @@ impl WebsitePolicy {
             WebsitePolicyConfig::default()
         };
 
-        let mtime = std::fs::metadata(&path)
-            .and_then(|m| m.modified())
-            .ok();
+        let mtime = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
 
         Self {
             config: Arc::new(RwLock::new(config)),
@@ -363,13 +360,11 @@ pub enum TirithAction {
     Warn,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TirithConfig {
     #[serde(default)]
     pub rules: Vec<TirithRule>,
 }
-
 
 /// Result of a Tirith security check.
 #[derive(Debug, Clone, Serialize)]
@@ -408,9 +403,7 @@ impl TirithSecurity {
             TirithConfig::default()
         };
 
-        let mtime = std::fs::metadata(&path)
-            .and_then(|m| m.modified())
-            .ok();
+        let mtime = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
 
         Self {
             config: Arc::new(RwLock::new(config)),
@@ -459,11 +452,7 @@ impl TirithSecurity {
     }
 
     /// Check a tool call against security rules.
-    pub fn check_tool_call(
-        &self,
-        tool_name: &str,
-        params: &Value,
-    ) -> TirithCheckResult {
+    pub fn check_tool_call(&self, tool_name: &str, params: &Value) -> TirithCheckResult {
         self.maybe_reload();
 
         let config = self.config.read().unwrap();
@@ -575,10 +564,7 @@ impl Default for UrlSafetyHandler {
 #[async_trait]
 impl ToolHandler for UrlSafetyHandler {
     async fn execute(&self, params: Value) -> Result<String, ToolError> {
-        let url = params
-            .get("url")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let url = params.get("url").and_then(|v| v.as_str()).unwrap_or("");
         if url.is_empty() {
             return Err(ToolError::InvalidParams("Missing 'url'".into()));
         }
@@ -775,19 +761,13 @@ mod tests {
         };
         let engine = TirithSecurity::from_config(config);
 
-        let result = engine.check_tool_call(
-            "terminal",
-            &json!({"command": "rm -rf /"}),
-        );
+        let result = engine.check_tool_call("terminal", &json!({"command": "rm -rf /"}));
         assert!(!result.allowed);
         assert_eq!(result.action, TirithAction::Block);
         assert!(result.reason.contains("Destructive"));
 
         // Non-matching command should be allowed
-        let result = engine.check_tool_call(
-            "terminal",
-            &json!({"command": "ls -la"}),
-        );
+        let result = engine.check_tool_call("terminal", &json!({"command": "ls -la"}));
         assert!(result.allowed);
     }
 
@@ -803,10 +783,7 @@ mod tests {
         };
         let engine = TirithSecurity::from_config(config);
 
-        let result = engine.check_tool_call(
-            "any_tool",
-            &json!({"data": "contains password"}),
-        );
+        let result = engine.check_tool_call("any_tool", &json!({"data": "contains password"}));
         assert_eq!(result.action, TirithAction::Warn);
         assert!(result.allowed); // warn doesn't block
     }
@@ -875,17 +852,11 @@ mod tests {
         let engine = TirithSecurity::from_config(config);
 
         // First rule matches — allowed
-        let result = engine.check_tool_call(
-            "terminal",
-            &json!({"command": "safe_cmd"}),
-        );
+        let result = engine.check_tool_call("terminal", &json!({"command": "safe_cmd"}));
         assert!(result.allowed);
 
         // Second rule matches — blocked
-        let result = engine.check_tool_call(
-            "terminal",
-            &json!({"command": "other_cmd"}),
-        );
+        let result = engine.check_tool_call("terminal", &json!({"command": "other_cmd"}));
         assert!(!result.allowed);
     }
 

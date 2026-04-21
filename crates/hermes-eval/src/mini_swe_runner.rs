@@ -260,10 +260,7 @@ impl Verifier for MiniSweVerifier {
 // ---------------------------------------------------------------------------
 
 /// Run the mini SWE benchmark with a given rollout implementation.
-pub async fn run_mini_swe<R>(
-    config: MiniSweConfig,
-    rollout: Arc<R>,
-) -> EvalResult<RunRecord>
+pub async fn run_mini_swe<R>(config: MiniSweConfig, rollout: Arc<R>) -> EvalResult<RunRecord>
 where
     R: TaskRollout + Send + Sync + 'static,
 {

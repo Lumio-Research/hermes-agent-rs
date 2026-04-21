@@ -165,9 +165,7 @@ mod tests {
         assert!((o.avg_messages_per_session - 15.0).abs() < 1e-6);
         assert!(o.date_range_start.is_some());
         assert!(o.date_range_end.is_some());
-        assert!(
-            o.date_range_start.unwrap() <= o.date_range_end.unwrap()
-        );
+        assert!(o.date_range_start.unwrap() <= o.date_range_end.unwrap());
     }
 
     #[test]

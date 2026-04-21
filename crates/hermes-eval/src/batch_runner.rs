@@ -240,7 +240,10 @@ impl BatchRunner {
             ));
         }
         for f in &result.failed {
-            table.push_str(&format!("| {} | — | — | FAILED | — | {} |\n", f.run_id, f.error));
+            table.push_str(&format!(
+                "| {} | — | — | FAILED | — | {} |\n",
+                f.run_id, f.error
+            ));
         }
         table
     }

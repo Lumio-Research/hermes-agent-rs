@@ -201,9 +201,7 @@ impl SentenceBuffer {
 /// Python: `cleaned.lower().rstrip(".!,")` is used as the dedup key.
 fn normalise_for_dedup(s: &str) -> String {
     let lower = s.to_lowercase();
-    lower
-        .trim_end_matches(['.', '!', ','])
-        .to_string()
+    lower.trim_end_matches(['.', '!', ',']).to_string()
 }
 
 // ---------------------------------------------------------------------------

@@ -21,13 +21,25 @@ pub enum CheckStatus {
 
 impl CheckResult {
     fn ok(name: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self { name: name.into(), status: CheckStatus::Ok, detail: detail.into() }
+        Self {
+            name: name.into(),
+            status: CheckStatus::Ok,
+            detail: detail.into(),
+        }
     }
     fn warn(name: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self { name: name.into(), status: CheckStatus::Warn, detail: detail.into() }
+        Self {
+            name: name.into(),
+            status: CheckStatus::Warn,
+            detail: detail.into(),
+        }
     }
     fn fail(name: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self { name: name.into(), status: CheckStatus::Fail, detail: detail.into() }
+        Self {
+            name: name.into(),
+            status: CheckStatus::Fail,
+            detail: detail.into(),
+        }
     }
 
     pub fn icon(&self) -> &'static str {
@@ -46,15 +58,29 @@ pub fn run_doctor() -> Vec<CheckResult> {
     // System info
     results.push(CheckResult::ok(
         "System",
-        format!("{} / {} / {}", std::env::consts::OS, std::env::consts::ARCH, std::env::consts::FAMILY),
+        format!(
+            "{} / {} / {}",
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+            std::env::consts::FAMILY
+        ),
     ));
 
     // Hermes home directory
     let home = hermes_home();
     if home.exists() {
-        results.push(CheckResult::ok("Hermes home", format!("{} (exists)", home.display())));
+        results.push(CheckResult::ok(
+            "Hermes home",
+            format!("{} (exists)", home.display()),
+        ));
     } else {
-        results.push(CheckResult::warn("Hermes home", format!("{} (not found — will be created on first run)", home.display())));
+        results.push(CheckResult::warn(
+            "Hermes home",
+            format!(
+                "{} (not found — will be created on first run)",
+                home.display()
+            ),
+        ));
     }
 
     // Config file
@@ -80,9 +106,15 @@ pub fn run_doctor() -> Vec<CheckResult> {
         let count = std::fs::read_dir(&skills_dir)
             .map(|entries| entries.filter_map(|e| e.ok()).count())
             .unwrap_or(0);
-        results.push(CheckResult::ok("Skills", format!("{} skills in {}", count, skills_dir.display())));
+        results.push(CheckResult::ok(
+            "Skills",
+            format!("{} skills in {}", count, skills_dir.display()),
+        ));
     } else {
-        results.push(CheckResult::ok("Skills", "no skills directory (none installed)"));
+        results.push(CheckResult::ok(
+            "Skills",
+            "no skills directory (none installed)",
+        ));
     }
 
     results
@@ -91,13 +123,19 @@ pub fn run_doctor() -> Vec<CheckResult> {
 fn check_config(home: &Path, results: &mut Vec<CheckResult>) {
     let config_path = home.join("config.yaml");
     if !config_path.exists() {
-        results.push(CheckResult::warn("Config", "config.yaml not found — using defaults"));
+        results.push(CheckResult::warn(
+            "Config",
+            "config.yaml not found — using defaults",
+        ));
         return;
     }
 
     match load_config(None) {
         Ok(_cfg) => {
-            results.push(CheckResult::ok("Config", format!("{} (valid)", config_path.display())));
+            results.push(CheckResult::ok(
+                "Config",
+                format!("{} (valid)", config_path.display()),
+            ));
         }
         Err(e) => {
             results.push(CheckResult::fail("Config", format!("parse error: {}", e)));
@@ -162,7 +200,10 @@ fn check_memory_files(home: &Path, results: &mut Vec<CheckResult>) {
         let size = std::fs::metadata(&memory_md).map(|m| m.len()).unwrap_or(0);
         results.push(CheckResult::ok("MEMORY.md", format!("{} bytes", size)));
     } else {
-        results.push(CheckResult::ok("MEMORY.md", "not yet created (will be created on first memory write)"));
+        results.push(CheckResult::ok(
+            "MEMORY.md",
+            "not yet created (will be created on first memory write)",
+        ));
     }
 
     if user_md.exists() {
@@ -176,7 +217,10 @@ fn check_memory_files(home: &Path, results: &mut Vec<CheckResult>) {
 /// Legacy wrapper for backward compatibility.
 pub fn run_basic_checks() -> Result<Vec<String>, AgentError> {
     let results = run_doctor();
-    Ok(results.iter().map(|r| format!("{} {}: {}", r.icon(), r.name, r.detail)).collect())
+    Ok(results
+        .iter()
+        .map(|r| format!("{} {}: {}", r.icon(), r.name, r.detail))
+        .collect())
 }
 
 #[cfg(test)]

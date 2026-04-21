@@ -127,8 +127,7 @@ impl CopilotAcpClient {
 
         let session_id = {
             let conn = self.connection.lock().await;
-            conn.as_ref()
-                .and_then(|c| c.session_id.clone())
+            conn.as_ref().and_then(|c| c.session_id.clone())
         };
 
         // Create session if needed
@@ -182,12 +181,14 @@ impl CopilotAcpClient {
             ))
         })?;
 
-        let stdin = child.stdin.take().ok_or_else(|| {
-            AgentError::Config("Failed to capture Copilot ACP stdin".into())
-        })?;
-        let stdout = child.stdout.take().ok_or_else(|| {
-            AgentError::Config("Failed to capture Copilot ACP stdout".into())
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| AgentError::Config("Failed to capture Copilot ACP stdin".into()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| AgentError::Config("Failed to capture Copilot ACP stdout".into()))?;
 
         tracing::info!(command = %self.config.command, "Copilot ACP subprocess spawned");
 
@@ -245,9 +246,9 @@ impl CopilotAcpClient {
 
     async fn send_request(&self, method: &str, params: Value) -> Result<Value, AgentError> {
         let mut conn_guard = self.connection.lock().await;
-        let conn = conn_guard.as_mut().ok_or_else(|| {
-            AgentError::Config("Copilot ACP not connected".into())
-        })?;
+        let conn = conn_guard
+            .as_mut()
+            .ok_or_else(|| AgentError::Config("Copilot ACP not connected".into()))?;
 
         conn.request_id += 1;
         let request = json!({
@@ -296,9 +297,7 @@ impl CopilotAcpClient {
 
                 Ok(response.get("result").cloned().unwrap_or(Value::Null))
             }
-            Ok(Err(e)) => Err(AgentError::LlmApi(format!(
-                "Read from Copilot ACP: {e}"
-            ))),
+            Ok(Err(e)) => Err(AgentError::LlmApi(format!("Read from Copilot ACP: {e}"))),
             Err(_) => Err(AgentError::LlmApi(format!(
                 "Copilot ACP request timed out after {:?}",
                 self.config.request_timeout

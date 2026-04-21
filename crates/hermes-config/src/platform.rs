@@ -20,14 +20,12 @@ pub enum UnauthorizedDmBehavior {
     Ignore,
 }
 
-
 // ---------------------------------------------------------------------------
 // PlatformConfig
 // ---------------------------------------------------------------------------
 
 /// Configuration for a specific platform (e.g. discord, slack).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PlatformConfig {
     /// Whether this platform adapter is enabled.
     #[serde(default)]
@@ -70,7 +68,6 @@ pub struct PlatformConfig {
     #[serde(default, flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }
-
 
 impl PlatformConfig {
     /// Deep-merge a JSON overlay into this configuration.

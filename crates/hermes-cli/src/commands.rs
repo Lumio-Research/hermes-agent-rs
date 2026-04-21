@@ -3873,7 +3873,10 @@ pub async fn handle_cli_region(
             ];
             if known.contains(&target.as_str()) {
                 println!("Region set to: {}", target);
-                println!("API requests will be routed through the {} endpoint.", target);
+                println!(
+                    "API requests will be routed through the {} endpoint.",
+                    target
+                );
             } else {
                 println!(
                     "Unknown region: '{}'. Use `hermes region list` to see available regions.",
@@ -3923,10 +3926,7 @@ pub async fn handle_cli_memory_setup(
                     "redis" | "qdrant" | "mem0" | "honcho" | "holographic" | "supermemory"
                     | "byterover" => {
                         let env_key = format!("{}_API_KEY", p.to_uppercase());
-                        println!(
-                            "Set {} in ~/.hermes/.env to enable this provider.",
-                            env_key
-                        );
+                        println!("Set {} in ~/.hermes/.env to enable this provider.", env_key);
                     }
                     _ => {
                         println!("Unknown provider: '{}'. See the list above.", p);
@@ -3953,8 +3953,22 @@ pub async fn handle_cli_memory_setup(
             if memory_dir.exists() {
                 let memory_md = memory_dir.join("MEMORY.md");
                 let user_md = memory_dir.join("USER.md");
-                println!("  MEMORY.md: {}", if memory_md.exists() { "present" } else { "not found" });
-                println!("  USER.md:   {}", if user_md.exists() { "present" } else { "not found" });
+                println!(
+                    "  MEMORY.md: {}",
+                    if memory_md.exists() {
+                        "present"
+                    } else {
+                        "not found"
+                    }
+                );
+                println!(
+                    "  USER.md:   {}",
+                    if user_md.exists() {
+                        "present"
+                    } else {
+                        "not found"
+                    }
+                );
             } else {
                 println!("  Memories directory: not created");
             }
@@ -4039,18 +4053,21 @@ pub async fn handle_cli_runtime_provider(
             println!("Runtime Provider Status");
             println!("  Provider: {}", provider_name);
             println!("  Model:    {}", model_name);
-            println!("  Endpoint: {}", match provider_name {
-                "openai" => "https://api.openai.com/v1",
-                "anthropic" => "https://api.anthropic.com/v1",
-                "openrouter" => "https://openrouter.ai/api/v1",
-                "nous" => "https://inference.nous.hermes.dev/v1",
-                _ => "(custom endpoint)",
-            });
+            println!(
+                "  Endpoint: {}",
+                match provider_name {
+                    "openai" => "https://api.openai.com/v1",
+                    "anthropic" => "https://api.anthropic.com/v1",
+                    "openrouter" => "https://openrouter.ai/api/v1",
+                    "nous" => "https://inference.nous.hermes.dev/v1",
+                    _ => "(custom endpoint)",
+                }
+            );
 
             // Check for API key availability
             let env_key = format!("{}_API_KEY", provider_name.to_uppercase());
-            let has_key = std::env::var(&env_key).is_ok()
-                || std::env::var("OPENAI_API_KEY").is_ok();
+            let has_key =
+                std::env::var(&env_key).is_ok() || std::env::var("OPENAI_API_KEY").is_ok();
             println!(
                 "  Auth:     {}",
                 if has_key {
@@ -4097,7 +4114,9 @@ pub async fn handle_cli_subscription(
             println!("Nous Subscription Plans");
             println!("=======================\n");
             println!("  Free        $0/mo    — 1,000 requests/month, community models");
-            println!("  Pro         $20/mo   — 50,000 requests/month, all models, priority routing");
+            println!(
+                "  Pro         $20/mo   — 50,000 requests/month, all models, priority routing"
+            );
             println!("  Team        $50/mo   — 200,000 requests/month, team features, SSO");
             println!("  Enterprise  Custom   — Unlimited, dedicated infrastructure, SLA");
             println!("\nUpgrade: hermes subscription upgrade");
@@ -4156,7 +4175,10 @@ pub async fn handle_cli_codex_models(
             ];
             if known.contains(&target.as_str()) {
                 println!("Codex model set to: {}", target);
-                println!("(To persist, run: hermes config set model codex:{})", target);
+                println!(
+                    "(To persist, run: hermes config set model codex:{})",
+                    target
+                );
             } else {
                 println!(
                     "Unknown codex model: '{}'. Use `hermes codex-models list` to see options.",
@@ -4206,9 +4228,7 @@ pub async fn handle_cli_codex_models(
 // ---------------------------------------------------------------------------
 
 /// Handle `hermes clipboard [action]`.
-pub async fn handle_cli_clipboard(
-    action: Option<String>,
-) -> Result<(), hermes_core::AgentError> {
+pub async fn handle_cli_clipboard(action: Option<String>) -> Result<(), hermes_core::AgentError> {
     match action.as_deref().unwrap_or("copy") {
         "copy" => {
             println!("Clipboard: copy");

@@ -65,11 +65,7 @@ impl MirrorManager {
     }
 
     /// Set a mirror route from source to target.
-    pub fn set_route(
-        &self,
-        source_channel: impl Into<String>,
-        target_channel: impl Into<String>,
-    ) {
+    pub fn set_route(&self, source_channel: impl Into<String>, target_channel: impl Into<String>) {
         let source = source_channel.into();
         let target = target_channel.into();
         if let Ok(mut routes) = self.routes.write() {
