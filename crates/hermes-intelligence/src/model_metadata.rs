@@ -4,11 +4,8 @@
 //! compression and run_agent for pre-flight context checks.
 
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tracing;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -389,13 +386,13 @@ pub fn estimate_tokens_rough(text: &str) -> u64 {
     if text.is_empty() {
         return 0;
     }
-    ((text.len() as u64) + 3) / 4
+    (text.len() as u64).div_ceil(4)
 }
 
 /// Rough token estimate for a serialized message list.
 pub fn estimate_messages_tokens_rough(messages: &[serde_json::Value]) -> u64 {
     let total_chars: usize = messages.iter().map(|m| m.to_string().len()).sum();
-    ((total_chars as u64) + 3) / 4
+    (total_chars as u64).div_ceil(4)
 }
 
 /// Rough token estimate for a full request (messages + system + tools).
@@ -409,7 +406,7 @@ pub fn estimate_request_tokens_rough(
     if let Some(tools) = tools {
         total_chars += tools.iter().map(|t| t.to_string().len()).sum::<usize>();
     }
-    ((total_chars as u64) + 3) / 4
+    (total_chars as u64).div_ceil(4)
 }
 
 // ---------------------------------------------------------------------------

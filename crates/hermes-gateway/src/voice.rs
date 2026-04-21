@@ -6,17 +6,14 @@ use hermes_core::AgentError;
 
 /// Voice mode state.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub enum VoiceState {
+    #[default]
     Disabled,
     ListenOnly,
     FullDuplex,
 }
 
-impl Default for VoiceState {
-    fn default() -> Self {
-        Self::Disabled
-    }
-}
 
 /// Voice mode configuration.
 #[derive(Debug, Clone)]
@@ -109,11 +106,10 @@ impl VoiceManager {
         }
 
         // Run voice activity detection if enabled
-        if self.config.auto_detect_voice {
-            if !self.detect_voice_activity(audio_data) {
+        if self.config.auto_detect_voice
+            && !self.detect_voice_activity(audio_data) {
                 return Ok(String::new());
             }
-        }
 
         self.transcribe(audio_data, format).await
     }

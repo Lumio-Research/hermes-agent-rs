@@ -151,6 +151,12 @@ pub struct HolographicMemoryPlugin {
     session_id: Mutex<String>,
 }
 
+impl Default for HolographicMemoryPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HolographicMemoryPlugin {
     pub fn new() -> Self {
         Self {
@@ -230,14 +236,14 @@ impl HolographicMemoryPlugin {
         }
 
         // Keyword-based search using LIKE matching
-        let like_clauses: Vec<String> = keywords
+        let _like_clauses: Vec<String> = keywords
             .iter()
             .map(|_| "(LOWER(content) LIKE ?1 OR LOWER(tags) LIKE ?1)".to_string())
             .collect();
 
         // Build individual LIKE patterns and combined query
         let mut results = Vec::new();
-        let sql = format!(
+        let _sql = format!(
             "SELECT fact_id, content, category, tags, trust_score, retrieval_count, helpful_count, created_at, updated_at \
              FROM facts WHERE trust_score >= ?1 {} ORDER BY trust_score DESC LIMIT ?2",
             if category.is_some() { "AND category = ?3" } else { "" }

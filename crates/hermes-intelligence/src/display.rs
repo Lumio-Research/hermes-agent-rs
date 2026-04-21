@@ -408,9 +408,8 @@ pub fn format_context_pressure(
 ) -> String {
     let pct_int = (compaction_progress * 100.0).min(100.0) as u32;
     let filled = ((compaction_progress * BAR_WIDTH as f64) as usize).min(BAR_WIDTH);
-    let bar: String = std::iter::repeat(BAR_FILLED)
-        .take(filled)
-        .chain(std::iter::repeat(BAR_EMPTY).take(BAR_WIDTH - filled))
+    let bar: String = std::iter::repeat_n(BAR_FILLED, filled)
+        .chain(std::iter::repeat_n(BAR_EMPTY, BAR_WIDTH - filled))
         .collect();
 
     let threshold_k = if threshold_tokens >= 1000 {
@@ -440,9 +439,8 @@ pub fn format_context_pressure_gateway(
 ) -> String {
     let pct_int = (compaction_progress * 100.0).min(100.0) as u32;
     let filled = ((compaction_progress * BAR_WIDTH as f64) as usize).min(BAR_WIDTH);
-    let bar: String = std::iter::repeat(BAR_FILLED)
-        .take(filled)
-        .chain(std::iter::repeat(BAR_EMPTY).take(BAR_WIDTH - filled))
+    let bar: String = std::iter::repeat_n(BAR_FILLED, filled)
+        .chain(std::iter::repeat_n(BAR_EMPTY, BAR_WIDTH - filled))
         .collect();
 
     let threshold_pct_int = (threshold_percent * 100.0) as u32;

@@ -206,7 +206,7 @@ async fn run_model(cli: Cli, provider_model: Option<String>) -> Result<(), Agent
 }
 
 /// Handle `hermes tools [action]`.
-async fn run_tools(cli: Cli, action: Option<String>) -> Result<(), AgentError> {
+async fn run_tools(_cli: Cli, action: Option<String>) -> Result<(), AgentError> {
     let registry = hermes_tools::ToolRegistry::new();
     let tools = registry.list_tools();
 

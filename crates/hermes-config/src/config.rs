@@ -207,6 +207,7 @@ fn default_tools() -> Vec<String> {
 
 /// Configuration for a named LLM provider endpoint.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct LlmProviderConfig {
     /// API key (or env-var reference like "${MY_API_KEY}").
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -259,24 +260,6 @@ pub struct LlmProviderConfig {
     pub oauth_client_id: Option<String>,
 }
 
-impl Default for LlmProviderConfig {
-    fn default() -> Self {
-        Self {
-            api_key: None,
-            base_url: None,
-            command: None,
-            args: Vec::new(),
-            model: None,
-            max_tokens: None,
-            temperature: None,
-            extra_body: None,
-            rate_limit: None,
-            credential_pool: Vec::new(),
-            oauth_token_url: None,
-            oauth_client_id: None,
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // SmartModelRoutingConfig
@@ -344,7 +327,9 @@ fn default_max_simple_words() -> usize {
 /// Which backend to use for terminal/command execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum TerminalBackendType {
+    #[default]
     Local,
     Docker,
     Ssh,
@@ -353,11 +338,6 @@ pub enum TerminalBackendType {
     Singularity,
 }
 
-impl Default for TerminalBackendType {
-    fn default() -> Self {
-        Self::Local
-    }
-}
 
 /// Configuration for terminal/command-execution backends.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -409,6 +389,7 @@ fn default_max_output_size() -> usize {
 
 /// Approval / safety-gate settings for dangerous operations.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ApprovalConfig {
     /// Whether the approval gate is enabled.
     #[serde(default)]
@@ -427,16 +408,6 @@ pub struct ApprovalConfig {
     pub whitelist_commands: Vec<String>,
 }
 
-impl Default for ApprovalConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            dangerous_commands: Vec::new(),
-            require_approval: false,
-            whitelist_commands: Vec::new(),
-        }
-    }
-}
 
 /// Shared shape for tool-capability routing config copied from Python's
 /// `config.yaml` sections such as `web`, `tts`, `image_gen`, and `browser`.
@@ -501,6 +472,7 @@ pub struct ProfileConfig {
 
 /// HTTP/SOCKS proxy settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ProxyConfig {
     /// HTTP proxy URL (e.g. "http://proxy:8080").
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -511,14 +483,6 @@ pub struct ProxyConfig {
     pub socks_proxy: Option<String>,
 }
 
-impl Default for ProxyConfig {
-    fn default() -> Self {
-        Self {
-            http_proxy: None,
-            socks_proxy: None,
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Tests

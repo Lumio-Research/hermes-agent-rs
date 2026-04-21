@@ -4,9 +4,6 @@
 //! `BasePlatformAdapter` with common fields (token, webhook_url, proxy)
 //! and helper methods shared by all platform adapters.
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +21,7 @@ pub use hermes_core::traits::PlatformAdapter;
 
 /// Proxy configuration for a platform adapter.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct AdapterProxyConfig {
     /// HTTP proxy URL (e.g., "http://proxy:8080").
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -34,14 +32,6 @@ pub struct AdapterProxyConfig {
     pub socks_proxy: Option<String>,
 }
 
-impl Default for AdapterProxyConfig {
-    fn default() -> Self {
-        Self {
-            http_proxy: None,
-            socks_proxy: None,
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // BasePlatformAdapter

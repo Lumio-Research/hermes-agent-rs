@@ -1,9 +1,9 @@
 [package]
 name = "hermes-parity-tests"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 description = "Python↔Rust parity fixtures and harness for Hermes Agent"
 
 [dependencies]

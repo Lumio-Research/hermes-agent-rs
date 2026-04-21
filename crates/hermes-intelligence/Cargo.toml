@@ -1,9 +1,9 @@
 [package]
 name = "hermes-intelligence"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 description = "Smart router, error classifier, usage tracking, and prompt builder for Hermes Agent"
 
 [dependencies]

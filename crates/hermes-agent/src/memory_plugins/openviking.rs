@@ -116,6 +116,12 @@ fn viking_headers(st: &VikingState) -> reqwest::header::HeaderMap {
     h
 }
 
+impl Default for OpenVikingMemoryPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OpenVikingMemoryPlugin {
     pub fn new() -> Self {
         Self {

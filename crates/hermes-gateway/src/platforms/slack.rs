@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 use hermes_core::errors::GatewayError;
 use hermes_core::traits::{ParseMode, PlatformAdapter};
@@ -839,7 +839,7 @@ impl SlackAdapter {
 
         let resp = self
             .client
-            .post(&format!("{}/apps.connections.open", SLACK_API_BASE))
+            .post(format!("{}/apps.connections.open", SLACK_API_BASE))
             .header("Authorization", format!("Bearer {}", app_token))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .send()

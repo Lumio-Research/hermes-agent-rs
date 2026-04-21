@@ -339,11 +339,8 @@ impl ProcessManager {
                     // Timeout: force kill
                     tracing::warn!(name = name, "Process did not stop gracefully, sending SIGKILL");
                     let _ = child.kill().await;
-                    match child.wait().await {
-                        Ok(status) => {
-                            proc.info.exit_code = status.code();
-                        }
-                        Err(_) => {}
+                    if let Ok(status) = child.wait().await {
+                        proc.info.exit_code = status.code();
                     }
                     proc.info.status = ProcessStatus::Stopped;
                 }

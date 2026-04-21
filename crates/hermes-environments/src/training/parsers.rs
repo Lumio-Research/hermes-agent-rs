@@ -283,7 +283,7 @@ fn parse_json_tool_call(json_str: &str) -> Option<ParsedToolCall> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    
 
     #[test]
     fn hermes_single_tool_call() {

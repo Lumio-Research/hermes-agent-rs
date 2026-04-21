@@ -254,7 +254,7 @@ impl TerminalBackend for LocalBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write as IoWrite;
+    
 
     #[tokio::test]
     async fn test_execute_command_echo() {

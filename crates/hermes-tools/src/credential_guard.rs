@@ -235,7 +235,7 @@ fn is_protected_file_with_extra(path: &Path, extra: &[String]) -> bool {
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             let ext_lower = ext.to_lowercase();
             for &protected in PROTECTED_FILE_NAMES {
-                if protected.starts_with('.') && &ext_lower == &protected[1..] {
+                if protected.starts_with('.') && ext_lower == protected[1..] {
                     return true;
                 }
             }

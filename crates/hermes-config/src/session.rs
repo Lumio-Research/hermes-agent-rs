@@ -113,6 +113,7 @@ impl Default for SessionResetPolicy {
 
 /// Session management configuration.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct SessionConfig {
     /// Policy for when to reset the session context.
     #[serde(default)]
@@ -135,17 +136,6 @@ pub struct SessionConfig {
     pub session_type_overrides: HashMap<SessionType, SessionResetPolicy>,
 }
 
-impl Default for SessionConfig {
-    fn default() -> Self {
-        Self {
-            reset_policy: SessionResetPolicy::default(),
-            max_context_messages: None,
-            compression_enabled: false,
-            platform_overrides: HashMap::new(),
-            session_type_overrides: HashMap::new(),
-        }
-    }
-}
 
 impl SessionConfig {
     /// Round-trip serialize to serde_json::Value.

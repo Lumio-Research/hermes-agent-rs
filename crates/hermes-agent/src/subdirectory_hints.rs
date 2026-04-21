@@ -270,7 +270,7 @@ pub fn generate_project_hints(working_dir: &Path) -> String {
             } else {
                 format!("{}, ... ({} total)", dirs[..10].join(", "), dirs.len())
             };
-            hints.push(&""); // placeholder for formatting
+            hints.push(""); // placeholder for formatting
             return format!(
                 "Working directory: {}\nProject type: {}\nSubdirectories: {}",
                 working_dir.display(),
@@ -375,7 +375,7 @@ mod tests {
         std::fs::create_dir_all(&src_dir).unwrap();
         std::fs::write(src_dir.join("main.rs"), "fn main() {}").unwrap();
 
-        let mut tracker = SubdirectoryHintTracker::new(tmp.path());
+        let tracker = SubdirectoryHintTracker::new(tmp.path());
         let args = serde_json::json!({"command": "cat src/main.rs"});
         let dirs = tracker.extract_directories("terminal", &args);
         // Should extract src directory from the command

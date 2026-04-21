@@ -28,7 +28,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use hermes_core::{AgentError, LlmProvider, Message};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use tokio::time::timeout;
 
 use crate::agent_loop::{AgentConfig, AgentLoop, ToolRegistry};
@@ -431,6 +431,7 @@ mod tests {
     use super::*;
     use futures::stream::{BoxStream, StreamExt};
     use hermes_core::{LlmResponse, StreamChunk, ToolSchema};
+    use serde_json::Value;
     use std::sync::Arc;
 
     // Minimal LlmProvider stub that always returns an empty assistant response

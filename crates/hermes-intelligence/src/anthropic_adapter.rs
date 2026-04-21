@@ -242,8 +242,7 @@ pub fn convert_tools_to_anthropic(tools: &[Value]) -> Vec<AnthropicTool> {
 /// Convert an OpenAI-style image URL/data URL into an Anthropic image source.
 pub fn image_source_from_openai_url(url: &str) -> ImageSource {
     let url = url.trim();
-    if url.starts_with("data:") {
-        let after_data = &url[5..];
+    if let Some(after_data) = url.strip_prefix("data:") {
         let (header, data) = match after_data.find(',') {
             Some(idx) => (&after_data[..idx], &after_data[idx + 1..]),
             None => ("image/jpeg", after_data),
@@ -370,7 +369,7 @@ pub fn convert_messages_to_anthropic(
                 if let Some(last) = result.last_mut() {
                     if last.role == "user" {
                         if let AnthropicContent::Blocks(ref mut blocks) = last.content {
-                            if blocks.first().map_or(false, |b| {
+                            if blocks.first().is_some_and(|b| {
                                 matches!(b, AnthropicContentBlock::ToolResult { .. })
                             }) {
                                 blocks.push(tool_result);
@@ -459,14 +458,10 @@ fn convert_content_part(part: &Value) -> Option<AnthropicContentBlock> {
             })
         }
         _ => {
-            if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
-                Some(AnthropicContentBlock::Text {
+            part.get("text").and_then(|t| t.as_str()).map(|text| AnthropicContentBlock::Text {
                     text: text.to_string(),
                     cache_control: part.get("cache_control").cloned(),
                 })
-            } else {
-                None
-            }
         }
     }
 }
@@ -940,12 +935,10 @@ mod tests {
     #[test]
     fn test_default_anthropic_beta_list_oauth_appends() {
         let api = default_anthropic_beta_list(None, false);
-        assert!(api
-            .iter()
-            .any(|b| *b == "fine-grained-tool-streaming-2025-05-14"));
+        assert!(api.contains(&"fine-grained-tool-streaming-2025-05-14"));
 
         let oauth = default_anthropic_beta_list(None, true);
-        assert!(oauth.iter().any(|b| *b == "oauth-2025-04-20"));
+        assert!(oauth.contains(&"oauth-2025-04-20"));
         assert!(oauth.len() > api.len());
     }
 

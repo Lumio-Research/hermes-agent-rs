@@ -890,7 +890,7 @@ impl MatrixAdapter {
             .and_then(|v| v.as_str())
             .map(String::from);
 
-        let mut messages = self.parse_sync_events(&body);
+        let messages = self.parse_sync_events(&body);
 
         // Auto-join on invite
         let invites = self.parse_invites(&body);

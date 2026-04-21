@@ -1,9 +1,9 @@
 [package]
 name = "hermes-tools"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 description = "Tool registry, toolsets, and tool implementations for Hermes Agent"
 
 [dependencies]

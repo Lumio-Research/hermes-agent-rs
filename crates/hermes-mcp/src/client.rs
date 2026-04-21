@@ -840,7 +840,7 @@ impl McpManager {
 
     /// Check if a server is connected.
     pub fn is_connected(&self, name: &str) -> bool {
-        self.clients.get(name).map_or(false, |c| c.is_connected())
+        self.clients.get(name).is_some_and(|c| c.is_connected())
     }
 
     /// Get the list of connected server names.

@@ -11,7 +11,6 @@
 //!   2. `~/.honcho/config.json`
 //!   3. Environment variables (`HONCHO_API_KEY`, `HONCHO_BASE_URL`)
 
-use std::collections::HashMap;
 use std::sync::Mutex;
 
 use serde_json::{json, Value};
@@ -168,6 +167,13 @@ pub struct HonchoMemoryPlugin {
     recall_mode: Mutex<String>,
 }
 
+impl Default for HonchoMemoryPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[allow(dead_code)]
 impl HonchoMemoryPlugin {
     pub fn new() -> Self {
         Self {
@@ -248,7 +254,7 @@ impl MemoryProviderPlugin for HonchoMemoryPlugin {
         }
     }
 
-    fn prefetch(&self, query: &str, session_id: &str) -> String {
+    fn prefetch(&self, _query: &str, _session_id: &str) -> String {
         let mode = self.recall_mode.lock().unwrap().clone();
         if mode == "tools" {
             return String::new();
@@ -264,16 +270,15 @@ impl MemoryProviderPlugin for HonchoMemoryPlugin {
         String::new()
     }
 
-    fn queue_prefetch(&self, query: &str, session_id: &str) {
+    fn queue_prefetch(&self, _query: &str, _session_id: &str) {
         let mode = self.recall_mode.lock().unwrap().clone();
         if mode == "tools" {
-            return;
         }
         // Placeholder: real implementation would spawn background thread
         // calling dialectic_query and storing result in prefetch_result
     }
 
-    fn sync_turn(&self, user_content: &str, assistant_content: &str, session_id: &str) {
+    fn sync_turn(&self, user_content: &str, assistant_content: &str, _session_id: &str) {
         if self.config.lock().unwrap().is_none() {
             return;
         }
@@ -341,7 +346,7 @@ impl MemoryProviderPlugin for HonchoMemoryPlugin {
         }
     }
 
-    fn on_turn_start(&self, turn_number: u32, message: &str) {
+    fn on_turn_start(&self, turn_number: u32, _message: &str) {
         *self.turn_count.lock().unwrap() = turn_number;
     }
 
@@ -371,7 +376,7 @@ impl MemoryProviderPlugin for HonchoMemoryPlugin {
         ]))
     }
 
-    fn save_config(&self, config: &Value) -> Result<(), String> {
+    fn save_config(&self, _config: &Value) -> Result<(), String> {
         // Would write to $HERMES_HOME/honcho.json
         Ok(())
     }

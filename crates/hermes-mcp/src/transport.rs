@@ -266,6 +266,12 @@ pub struct ServerStdioTransport {
     started: bool,
 }
 
+impl Default for ServerStdioTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServerStdioTransport {
     pub fn new() -> Self {
         Self { started: false }
@@ -656,7 +662,7 @@ impl McpTransport for HttpSseTransport {
             // SSE-formatted response: extract the last `data:` line.
             body.lines()
                 .filter_map(|line| line.strip_prefix("data: "))
-                .last()
+                .next_back()
                 .unwrap_or(&body)
                 .to_string()
         } else {

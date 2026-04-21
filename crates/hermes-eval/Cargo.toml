@@ -1,9 +1,9 @@
 [package]
 name = "hermes-eval"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 description = "Agent evaluation harness for Hermes Agent (Terminal-Bench, SWE-bench, and more)"
 
 [features]

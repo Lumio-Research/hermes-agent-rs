@@ -40,17 +40,14 @@ use hermes_core::{tool_schema, JsonSchema, ToolError, ToolHandler, ToolSchema};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum PolicyAction {
+    #[default]
     Allow,
     Deny,
     Warn,
 }
 
-impl Default for PolicyAction {
-    fn default() -> Self {
-        Self::Allow
-    }
-}
 
 /// A single policy rule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -367,16 +364,12 @@ pub enum TirithAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TirithConfig {
     #[serde(default)]
     pub rules: Vec<TirithRule>,
 }
 
-impl Default for TirithConfig {
-    fn default() -> Self {
-        Self { rules: Vec::new() }
-    }
-}
 
 /// Result of a Tirith security check.
 #[derive(Debug, Clone, Serialize)]

@@ -96,7 +96,7 @@ impl RateLimitTracker {
         if let Some(reset_secs) = headers
             .get("x-ratelimit-reset")
             .and_then(|v| v.to_str().ok())
-            .and_then(|s| parse_reset_value(s))
+            .and_then(parse_reset_value)
         {
             state.reset_at = Some(now + Duration::from_secs_f64(reset_secs));
         }
@@ -114,7 +114,7 @@ impl RateLimitTracker {
         if let Some(reset_dur) = headers
             .get("x-ratelimit-reset-requests")
             .and_then(|v| v.to_str().ok())
-            .and_then(|s| parse_duration_string(s))
+            .and_then(parse_duration_string)
         {
             // Use the shorter of existing reset_at and this value
             let new_reset = now + reset_dur;

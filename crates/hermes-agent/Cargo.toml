@@ -1,9 +1,9 @@
 [package]
 name = "hermes-agent"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 description = "Agent loop engine for Hermes Agent"
 
 [dependencies]

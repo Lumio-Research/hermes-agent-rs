@@ -4,8 +4,8 @@
 //! Mirrors the Python `acp_adapter/session.py` implementation.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -17,8 +17,10 @@ use serde_json::Value;
 /// Lifecycle phase of an ACP session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SessionPhase {
     /// Session created, awaiting first prompt.
+    #[default]
     Created,
     /// Session is actively processing a prompt.
     Active,
@@ -32,11 +34,6 @@ pub enum SessionPhase {
     Failed,
 }
 
-impl Default for SessionPhase {
-    fn default() -> Self {
-        Self::Created
-    }
-}
 
 // ---------------------------------------------------------------------------
 // SessionState

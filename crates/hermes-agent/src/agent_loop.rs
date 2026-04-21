@@ -1080,9 +1080,7 @@ impl AgentLoop {
         if self.config.skip_memory {
             return None;
         }
-        let Some(ref mm) = self.memory_manager else {
-            return None;
-        };
+        let mm = self.memory_manager.as_ref()?;
         let Ok(mm) = mm.lock() else {
             return None;
         };
@@ -2009,14 +2007,13 @@ impl AgentLoop {
         if !body.is_object() {
             return self.config.extra_body.clone();
         }
-        if !matches!(api_mode, ApiMode::CodexResponses) {
-            if body.get("strict_tool_calls").is_none()
+        if !matches!(api_mode, ApiMode::CodexResponses)
+            && body.get("strict_tool_calls").is_none()
                 && body.get("strict_api").is_none()
                 && body.get("provider_strict").is_none()
             {
                 body["strict_api"] = Value::Bool(true);
             }
-        }
         Some(body)
     }
 
@@ -2429,9 +2426,7 @@ impl AgentLoop {
         let persist_user_idx = if self.config.persist_user_message.is_some() {
             ctx.get_messages()
                 .iter()
-                .enumerate()
-                .filter(|(_, m)| m.role == MessageRole::User)
-                .last()
+                .enumerate().rfind(|(_, m)| m.role == MessageRole::User)
                 .map(|(i, _)| i)
         } else {
             None
@@ -2454,9 +2449,7 @@ impl AgentLoop {
         // Memory prefetch for first user message
         let first_user = ctx
             .get_messages()
-            .iter()
-            .filter(|m| matches!(m.role, hermes_core::MessageRole::User))
-            .last()
+            .iter().rfind(|m| matches!(m.role, hermes_core::MessageRole::User))
             .and_then(|m| m.content.clone())
             .unwrap_or_default();
         let mem_ctx_raw = self.memory_prefetch(&first_user, session_id);
@@ -2538,7 +2531,7 @@ impl AgentLoop {
             }
 
             if self.config.checkpoint_interval_turns > 0
-                && (total_turns - 1) % self.config.checkpoint_interval_turns == 0
+                && (total_turns - 1).is_multiple_of(self.config.checkpoint_interval_turns)
             {
                 last_checkpoint_messages = Some(ctx.get_messages().to_vec());
             }
@@ -2547,7 +2540,7 @@ impl AgentLoop {
             self.memory_on_turn_start(total_turns, "");
 
             // Memory sync at flush interval
-            if total_turns % self.config.memory_flush_interval == 0 && total_turns > 0 {
+            if total_turns.is_multiple_of(self.config.memory_flush_interval) && total_turns > 0 {
                 let msgs = ctx.get_messages();
                 let (u, a) = extract_last_user_assistant(msgs);
                 self.memory_sync(&u, &a, session_id);
@@ -2608,7 +2601,7 @@ impl AgentLoop {
                     .message
                     .tool_calls
                     .as_ref()
-                    .map_or(false, |tc| !tc.is_empty());
+                    .is_some_and(|tc| !tc.is_empty());
                 if has_tools {
                     break r;
                 }
@@ -2656,7 +2649,7 @@ impl AgentLoop {
             let post_ctx = serde_json::json!({
                 "turn": total_turns,
                 "api_time_ms": api_elapsed,
-                "has_tool_calls": response.message.tool_calls.as_ref().map_or(false, |tc| !tc.is_empty()),
+                "has_tool_calls": response.message.tool_calls.as_ref().is_some_and(|tc| !tc.is_empty()),
             });
             let post_results = self.invoke_hook(HookType::PostLlmCall, &post_ctx);
             self.inject_hook_context(&post_results, &mut ctx);
@@ -2720,7 +2713,7 @@ impl AgentLoop {
             if assistant_msg
                 .tool_calls
                 .as_ref()
-                .map_or(false, |v| !v.is_empty())
+                .is_some_and(|v| !v.is_empty())
                 && Self::assistant_visible_text_after_think_blocks(&assistant_msg)
             {
                 last_content_with_tools = assistant_msg
@@ -3144,9 +3137,7 @@ impl AgentLoop {
         let persist_user_idx = if self.config.persist_user_message.is_some() {
             ctx.get_messages()
                 .iter()
-                .enumerate()
-                .filter(|(_, m)| m.role == MessageRole::User)
-                .last()
+                .enumerate().rfind(|(_, m)| m.role == MessageRole::User)
                 .map(|(i, _)| i)
         } else {
             None
@@ -3169,9 +3160,7 @@ impl AgentLoop {
         // Memory prefetch
         let first_user = ctx
             .get_messages()
-            .iter()
-            .filter(|m| matches!(m.role, hermes_core::MessageRole::User))
-            .last()
+            .iter().rfind(|m| matches!(m.role, hermes_core::MessageRole::User))
             .and_then(|m| m.content.clone())
             .unwrap_or_default();
         let mem_ctx_raw = self.memory_prefetch(&first_user, session_id);
@@ -3252,12 +3241,12 @@ impl AgentLoop {
             self.memory_on_turn_start(total_turns, "");
 
             if self.config.checkpoint_interval_turns > 0
-                && (total_turns - 1) % self.config.checkpoint_interval_turns == 0
+                && (total_turns - 1).is_multiple_of(self.config.checkpoint_interval_turns)
             {
                 last_checkpoint_messages = Some(ctx.get_messages().to_vec());
             }
 
-            if total_turns % self.config.memory_flush_interval == 0 && total_turns > 0 {
+            if total_turns.is_multiple_of(self.config.memory_flush_interval) && total_turns > 0 {
                 let (u, a) = extract_last_user_assistant(ctx.get_messages());
                 self.memory_sync(&u, &a, session_id);
             }
@@ -3355,7 +3344,7 @@ impl AgentLoop {
                     .message
                     .tool_calls
                     .as_ref()
-                    .map_or(false, |tc| !tc.is_empty());
+                    .is_some_and(|tc| !tc.is_empty());
                 if has_tools {
                     break r;
                 }
@@ -3402,7 +3391,7 @@ impl AgentLoop {
             let post_ctx = serde_json::json!({
                 "turn": total_turns,
                 "api_time_ms": _api_elapsed_ms,
-                "has_tool_calls": response.message.tool_calls.as_ref().map_or(false, |tc| !tc.is_empty()),
+                "has_tool_calls": response.message.tool_calls.as_ref().is_some_and(|tc| !tc.is_empty()),
             });
             let post_results = self.invoke_hook(HookType::PostLlmCall, &post_ctx);
             self.inject_hook_context(&post_results, &mut ctx);
@@ -3465,7 +3454,7 @@ impl AgentLoop {
             if assistant_msg
                 .tool_calls
                 .as_ref()
-                .map_or(false, |v| !v.is_empty())
+                .is_some_and(|v| !v.is_empty())
                 && Self::assistant_visible_text_after_think_blocks(&assistant_msg)
             {
                 last_content_with_tools = assistant_msg
@@ -3479,7 +3468,7 @@ impl AgentLoop {
                 && assistant_msg
                     .tool_calls
                     .as_ref()
-                    .map_or(false, |calls| !calls.is_empty())
+                    .is_some_and(|calls| !calls.is_empty())
                 && truncated_tool_call_retries < self.config.truncated_tool_call_max_retries
             {
                 truncated_tool_call_retries = truncated_tool_call_retries.saturating_add(1);
@@ -4243,9 +4232,6 @@ impl AgentLoop {
             let tool_name = tc.function.name.clone();
             let raw_args = tc.function.arguments.clone();
             let registry = self.tool_registry.clone();
-            let max_delegate_depth = max_delegate_depth;
-            let current_delegate_depth = current_delegate_depth;
-            let parent_budget_remaining_usd = parent_budget_remaining_usd;
 
             join_set.spawn(async move {
                 match registry.get(&tool_name) {

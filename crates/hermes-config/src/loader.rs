@@ -5,7 +5,7 @@ use std::path::Path;
 // Re-export ConfigError for convenience
 pub use hermes_core::ConfigError;
 
-use crate::config::{GatewayConfig, LlmProviderConfig, ProxyConfig};
+use crate::config::{GatewayConfig, ProxyConfig};
 use crate::merge::merge_configs;
 use crate::paths;
 
@@ -270,7 +270,7 @@ fn apply_user_config_patch_dotted(
             let entry = config
                 .llm_providers
                 .entry((*provider).to_string())
-                .or_insert_with(LlmProviderConfig::default);
+                .or_default();
             match *field {
                 "api_key" => entry.api_key = Some(value.to_string()),
                 "base_url" => entry.base_url = Some(value.to_string()),
@@ -594,7 +594,7 @@ pub fn apply_env_overrides(config: &mut GatewayConfig) {
             config
                 .llm_providers
                 .entry(provider_name.to_string())
-                .or_insert_with(LlmProviderConfig::default)
+                .or_default()
                 .api_key = Some(v);
         }
     }

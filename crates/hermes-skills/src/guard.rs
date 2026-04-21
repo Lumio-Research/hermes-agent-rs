@@ -96,6 +96,7 @@ static COMPILED_BLOCKED_URLS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 ///
 /// Uses a default set of patterns but can be extended with custom ones.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct SkillGuard {
     /// Additional user-provided blocked content patterns.
     blocked_patterns: Vec<String>,
@@ -103,14 +104,6 @@ pub struct SkillGuard {
     blocked_urls: Vec<String>,
 }
 
-impl Default for SkillGuard {
-    fn default() -> Self {
-        Self {
-            blocked_patterns: Vec::new(),
-            blocked_urls: Vec::new(),
-        }
-    }
-}
 
 impl SkillGuard {
     /// Create a guard with custom blocked patterns and URLs.
@@ -227,11 +220,13 @@ impl SkillGuard {
 // ---------------------------------------------------------------------------
 
 /// Validate a skill using the default guard configuration.
+#[allow(dead_code)]
 pub fn validate_skill(skill: &Skill) -> Result<(), SkillError> {
     SkillGuard::default().validate_skill(skill)
 }
 
 /// Validate a skill URL using the default guard configuration.
+#[allow(dead_code)]
 pub fn validate_skill_url(url: &str) -> Result<(), SkillError> {
     SkillGuard::default().validate_skill_url(url)
 }

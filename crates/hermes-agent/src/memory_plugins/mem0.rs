@@ -20,6 +20,7 @@ use serde_json::{json, Value};
 use crate::memory_manager::MemoryProviderPlugin;
 
 const BREAKER_THRESHOLD: u32 = 5;
+#[allow(dead_code)]
 const BREAKER_COOLDOWN_SECS: u64 = 120;
 
 // ---------------------------------------------------------------------------
@@ -121,6 +122,13 @@ pub struct Mem0MemoryPlugin {
     breaker_open_until: Mutex<Option<Instant>>,
 }
 
+impl Default for Mem0MemoryPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[allow(dead_code)]
 impl Mem0MemoryPlugin {
     pub fn new() -> Self {
         Self {
@@ -207,9 +215,8 @@ impl MemoryProviderPlugin for Mem0MemoryPlugin {
         format!("## Mem0 Memory\n{}", result)
     }
 
-    fn queue_prefetch(&self, query: &str, _session_id: &str) {
+    fn queue_prefetch(&self, _query: &str, _session_id: &str) {
         if self.is_breaker_open() {
-            return;
         }
         // Placeholder: real implementation would call Mem0 search API
         // in a background thread and store result in prefetch_result

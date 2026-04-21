@@ -236,7 +236,7 @@ pub fn parse_response_audio(body: &Value) -> Result<Vec<u8>, ToolError> {
 }
 
 fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("odd number of hex digits".into());
     }
     let mut out = Vec::with_capacity(s.len() / 2);

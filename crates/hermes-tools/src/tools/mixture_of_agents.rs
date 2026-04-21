@@ -71,8 +71,10 @@ pub trait MoaBackend: Send + Sync {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum MoaStrategy {
     /// Have an aggregator model synthesize all responses into one.
+    #[default]
     Aggregate,
     /// Pick the most common answer (simple text equality).
     MajorityVote,
@@ -80,11 +82,6 @@ pub enum MoaStrategy {
     BestOfN,
 }
 
-impl Default for MoaStrategy {
-    fn default() -> Self {
-        Self::Aggregate
-    }
-}
 
 /// Configuration for the MoA pipeline.
 #[derive(Debug, Clone, Serialize, Deserialize)]

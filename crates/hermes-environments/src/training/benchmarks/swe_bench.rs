@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use super::super::{
-    load_hf_dataset_via_python, EnvConfig, EnvTask, HermesBaseEnv, Trajectory,
+    load_hf_dataset_via_python, EnvTask, HermesBaseEnv, Trajectory,
 };
 
 /// SWE-bench task metadata (matches HuggingFace dataset columns).

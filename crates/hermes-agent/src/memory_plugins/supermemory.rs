@@ -93,6 +93,7 @@ struct SupermemoryConfig {
     auto_capture: bool,
     max_recall_results: usize,
     search_mode: String,
+    #[allow(dead_code)]
     api_timeout: f64,
 }
 
@@ -169,6 +170,12 @@ pub struct SupermemoryMemoryPlugin {
     active: Mutex<bool>,
 }
 
+impl Default for SupermemoryMemoryPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SupermemoryMemoryPlugin {
     pub fn new() -> Self {
         Self {
@@ -225,7 +232,7 @@ impl MemoryProviderPlugin for SupermemoryMemoryPlugin {
         )
     }
 
-    fn prefetch(&self, query: &str, _session_id: &str) -> String {
+    fn prefetch(&self, _query: &str, _session_id: &str) -> String {
         if !*self.active.lock().unwrap() {
             return String::new();
         }

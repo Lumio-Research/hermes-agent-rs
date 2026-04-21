@@ -1,9 +1,9 @@
 [package]
 name = "hermes-environments"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 description = "Terminal backends and environment management for Hermes Agent"
 
 [features]

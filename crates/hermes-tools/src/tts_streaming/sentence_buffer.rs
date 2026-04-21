@@ -202,7 +202,7 @@ impl SentenceBuffer {
 fn normalise_for_dedup(s: &str) -> String {
     let lower = s.to_lowercase();
     lower
-        .trim_end_matches(|c: char| c == '.' || c == '!' || c == ',')
+        .trim_end_matches(['.', '!', ','])
         .to_string()
 }
 

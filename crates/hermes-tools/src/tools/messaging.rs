@@ -178,8 +178,8 @@ pub trait MessagingBackend: Send + Sync {
         &self,
         channel: &ResolvedChannel,
         message: &str,
-        split_long: bool,
-        max_chunk_size: usize,
+        _split_long: bool,
+        _max_chunk_size: usize,
     ) -> Result<DeliveryResult, ToolError> {
         // Default implementation: delegate to simple send
         let result = self
@@ -203,9 +203,9 @@ pub trait MessagingBackend: Send + Sync {
     async fn send_file(
         &self,
         platform: &str,
-        recipient: &str,
-        file_path: &str,
-        caption: Option<&str>,
+        _recipient: &str,
+        _file_path: &str,
+        _caption: Option<&str>,
     ) -> Result<String, ToolError> {
         // Default: not supported
         Err(ToolError::ExecutionFailed(format!(

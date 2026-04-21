@@ -175,6 +175,7 @@ pub struct ReferenceExtractor {
     file_path_re: Regex,
     url_re: Regex,
     env_var_re: Regex,
+    #[allow(dead_code)]
     git_ref_re: Regex,
     ip_re: Regex,
 }

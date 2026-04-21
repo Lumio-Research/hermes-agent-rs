@@ -6,9 +6,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::{json, Value};
-use tokio::sync::Mutex;
 
-use crate::events::{AcpEvent, EventSink, ToolCallIdTracker};
+use crate::events::{AcpEvent, EventSink};
 use crate::permissions::PermissionStore;
 use crate::protocol::*;
 use crate::session::{SessionManager, SessionPhase};
@@ -23,6 +22,7 @@ pub trait AcpHandler: Send + Sync {
 // Slash commands
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)]
 struct SlashCommand {
     name: &'static str,
     description: &'static str,
@@ -93,6 +93,7 @@ impl HermesAcpHandler {
         }
     }
 
+    #[allow(dead_code)]
     fn available_commands(&self) -> Vec<Value> {
         SLASH_COMMANDS
             .iter()
@@ -376,9 +377,9 @@ impl AcpHandler for HermesAcpHandler {
                     .or_else(|| param_str(p, "model"))
                     .unwrap_or("");
 
-                if let Some(mut state) = self.session_manager.get_session(session_id) {
+                if let Some(_state) = self.session_manager.get_session(session_id) {
                     // Update model in session manager
-                    let mut sessions = self.session_manager.list_sessions();
+                    let _sessions = self.session_manager.list_sessions();
                     tracing::info!("Session {}: model switched to {}", session_id, model_id);
                     AcpResponse::success(request.id, json!({}))
                 } else {
@@ -431,7 +432,7 @@ impl AcpHandler for HermesAcpHandler {
                     .unwrap_or("");
                 let msg_id = uuid::Uuid::new_v4().to_string();
 
-                if let Some(mut state) = self.session_manager.get_session(conv_id) {
+                if let Some(state) = self.session_manager.get_session(conv_id) {
                     let mut history = state.history.clone();
                     history.push(json!({
                         "id": msg_id,

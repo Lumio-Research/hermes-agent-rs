@@ -8,7 +8,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use hermes_core::errors::GatewayError;
 use hermes_core::traits::{ParseMode, PlatformAdapter};
@@ -245,7 +245,7 @@ fn smtp_send_raw(
     stream.set_read_timeout(Some(Duration::from_secs(30))).ok();
     stream.set_write_timeout(Some(Duration::from_secs(30))).ok();
 
-    let mut read_line = |stream: &TcpStream| -> Result<String, GatewayError> {
+    let read_line = |stream: &TcpStream| -> Result<String, GatewayError> {
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
         reader
@@ -271,7 +271,7 @@ fn smtp_send_raw(
     let _greeting = read_line(&stream)?;
 
     // EHLO
-    let _ehlo = send_cmd(&mut stream, &format!("EHLO hermes-agent"))?;
+    let _ehlo = send_cmd(&mut stream, "EHLO hermes-agent")?;
     // Drain multi-line EHLO response
     loop {
         let line = read_line(&stream)?;
@@ -354,7 +354,7 @@ fn imap_fetch_unseen(
         .with_no_client_auth();
     let server_name = rustls::pki_types::ServerName::try_from(host.to_owned())
         .map_err(|e| GatewayError::Platform(format!("Invalid server name: {e}")))?;
-    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name)
+    let conn = rustls::ClientConnection::new(Arc::new(config), server_name)
         .map_err(|e| GatewayError::Platform(format!("TLS init: {e}")))?;
     let tcp = TcpStream::connect(&addr)
         .map_err(|e| GatewayError::Platform(format!("IMAP connect {addr}: {e}")))?;
@@ -499,7 +499,7 @@ fn imap_fetch_unseen(
 
 fn base64_encode_simple(data: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = chunk.get(1).copied().unwrap_or(0) as u32;
@@ -523,7 +523,7 @@ fn base64_encode_simple(data: &[u8]) -> String {
 
 fn base64_encode_lines(data: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4 + data.len() / 57 * 2);
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4 + data.len() / 57 * 2);
     let mut col = 0;
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;

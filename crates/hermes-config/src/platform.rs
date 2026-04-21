@@ -11,18 +11,15 @@ use serde::{Deserialize, Serialize};
 /// How to handle unauthorized direct messages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum UnauthorizedDmBehavior {
     /// Pair the user with the bot (create a session).
     Pair,
     /// Silently ignore the message.
+    #[default]
     Ignore,
 }
 
-impl Default for UnauthorizedDmBehavior {
-    fn default() -> Self {
-        Self::Ignore
-    }
-}
 
 // ---------------------------------------------------------------------------
 // PlatformConfig
@@ -30,6 +27,7 @@ impl Default for UnauthorizedDmBehavior {
 
 /// Configuration for a specific platform (e.g. discord, slack).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct PlatformConfig {
     /// Whether this platform adapter is enabled.
     #[serde(default)]
@@ -73,22 +71,6 @@ pub struct PlatformConfig {
     pub extra: HashMap<String, serde_json::Value>,
 }
 
-impl Default for PlatformConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            token: None,
-            webhook_url: None,
-            require_mention: None,
-            unauthorized_dm_behavior: UnauthorizedDmBehavior::default(),
-            group_sessions_per_user: false,
-            home_channel: None,
-            allowed_users: Vec::new(),
-            admin_users: Vec::new(),
-            extra: HashMap::new(),
-        }
-    }
-}
 
 impl PlatformConfig {
     /// Deep-merge a JSON overlay into this configuration.

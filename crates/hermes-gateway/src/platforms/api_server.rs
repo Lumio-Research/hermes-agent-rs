@@ -175,7 +175,7 @@ impl ApiServerAdapter {
     fn make_completion_id() -> String {
         format!(
             "chatcmpl-{}",
-            uuid::Uuid::new_v4().to_string().replace('-', "")[..24].to_string()
+            &uuid::Uuid::new_v4().to_string().replace('-', "")[..24]
         )
     }
 
@@ -387,7 +387,7 @@ async fn handle_connection(
     let auth_header = request
         .lines()
         .find(|l| l.to_lowercase().starts_with("authorization:"))
-        .map(|l| l.splitn(2, ':').nth(1).unwrap_or("").trim().to_string());
+        .map(|l| l.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string());
 
     if let Some(ref expected) = auth_token {
         let valid = auth_header

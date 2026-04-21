@@ -98,7 +98,7 @@ impl CredentialPool {
         for offset in 0..len {
             let idx = (start + offset) % len;
             let entry = &inner.keys[idx];
-            if entry.rate_limited_until.map_or(true, |until| until <= now) {
+            if entry.rate_limited_until.is_none_or(|until| until <= now) {
                 inner.next_index = (idx + 1) % len;
                 inner.keys[idx].use_count += 1;
                 inner.keys[idx].rate_limited_until = None; // Clear expired limit

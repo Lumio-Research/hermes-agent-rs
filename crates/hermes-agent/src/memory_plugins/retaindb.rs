@@ -105,6 +105,12 @@ pub struct RetainDbMemoryPlugin {
     prefetch_ctx: std::sync::Arc<Mutex<String>>,
 }
 
+impl Default for RetainDbMemoryPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RetainDbMemoryPlugin {
     pub fn new() -> Self {
         Self {

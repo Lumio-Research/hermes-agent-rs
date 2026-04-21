@@ -4,7 +4,7 @@
 //! random, and least-used selection strategies.  Tracks rate limit
 //! exhaustion and automatic recovery.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -33,18 +33,15 @@ pub const EXHAUSTED_TTL_DEFAULT_SECONDS: u64 = 3600;
 /// How the pool selects the next credential.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum PoolStrategy {
+    #[default]
     FillFirst,
     RoundRobin,
     Random,
     LeastUsed,
 }
 
-impl Default for PoolStrategy {
-    fn default() -> Self {
-        Self::FillFirst
-    }
-}
 
 impl PoolStrategy {
     pub fn from_str_loose(s: &str) -> Self {

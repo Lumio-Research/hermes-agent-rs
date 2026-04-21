@@ -136,7 +136,7 @@ impl SmartModelRouter {
             .filter(|m| {
                 requirements
                     .max_context
-                    .map_or(true, |mc| m.context_window >= mc)
+                    .is_none_or(|mc| m.context_window >= mc)
             })
             .collect();
 
@@ -149,7 +149,7 @@ impl SmartModelRouter {
             .into_iter()
             .filter(|m| {
                 let estimated = m.cost_per_input_token * prompt_tokens as f64;
-                requirements.max_cost.map_or(true, |mc| estimated <= mc)
+                requirements.max_cost.is_none_or(|mc| estimated <= mc)
             })
             .collect();
 
@@ -178,9 +178,9 @@ impl SmartModelRouter {
             })
         };
 
-        Ok(best
+        best
             .map(|m| m.name.clone())
-            .ok_or(RouterError::NoModelMatched)?)
+            .ok_or(RouterError::NoModelMatched)
     }
 
     /// Get a model's info by name.

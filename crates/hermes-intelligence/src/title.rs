@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use hermes_core::{AgentError, LlmProvider, Message, ToolSchema};
+use hermes_core::{AgentError, LlmProvider, Message};
 
 // ---------------------------------------------------------------------------
 // TitleError
@@ -157,6 +157,7 @@ impl TitleGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hermes_core::ToolSchema;
 
     #[test]
     fn test_truncate_messages() {

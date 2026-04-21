@@ -268,7 +268,7 @@ pub fn resolve_billing_route(
         };
     }
     if provider_name == "anthropic" {
-        let bare = model.split('/').last().unwrap_or(&model).to_string();
+        let bare = model.split('/').next_back().unwrap_or(&model).to_string();
         return BillingRoute {
             provider: "anthropic".into(),
             model: bare,
@@ -277,7 +277,7 @@ pub fn resolve_billing_route(
         };
     }
     if provider_name == "openai" {
-        let bare = model.split('/').last().unwrap_or(&model).to_string();
+        let bare = model.split('/').next_back().unwrap_or(&model).to_string();
         return BillingRoute {
             provider: "openai".into(),
             model: bare,
@@ -292,7 +292,7 @@ pub fn resolve_billing_route(
         } else {
             provider_name
         },
-        model: model.split('/').last().unwrap_or(&model).to_string(),
+        model: model.split('/').next_back().unwrap_or(&model).to_string(),
         base_url: base,
         billing_mode: BillingMode::Unknown,
     }

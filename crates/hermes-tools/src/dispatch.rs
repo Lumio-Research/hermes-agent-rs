@@ -55,12 +55,12 @@ pub async fn dispatch_tools(
     budget: BudgetConfig,
     pool_size: usize,
 ) -> Vec<ToolResult> {
-    let concurrency = pool_size.max(1);
+    let _concurrency = pool_size.max(1);
     let mut join_set = JoinSet::new();
 
     for call in calls {
         let registry = registry.clone();
-        let max_chars = budget.max_result_size_chars;
+        let _max_chars = budget.max_result_size_chars;
         join_set.spawn(async move {
             let start = Instant::now();
             let result = registry
@@ -158,7 +158,7 @@ pub async fn dispatch_single(
                 .unwrap_or(serde_json::Value::Null),
         )
         .await;
-    let duration_ms = start.elapsed().as_millis() as u64;
+    let _duration_ms = start.elapsed().as_millis() as u64;
 
     let is_error = result.starts_with(r#"{"error"#);
 

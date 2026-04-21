@@ -384,7 +384,7 @@ pub fn validate_distribution(dist: &ToolsetDistribution) -> Result<(), String> {
     }
 
     for (toolset, &weight) in &dist.toolset_weights {
-        if weight < 0.0 || weight > 1.0 {
+        if !(0.0..=1.0).contains(&weight) {
             return Err(format!(
                 "Weight for toolset '{}' is {} — must be between 0.0 and 1.0",
                 toolset, weight

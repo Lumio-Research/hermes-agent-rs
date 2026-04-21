@@ -176,6 +176,7 @@ struct UsageStats {
 }
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 struct SessionRuntimeState {
     model: Option<String>,
     provider: Option<String>,
@@ -190,22 +191,6 @@ struct SessionRuntimeState {
     reasoning: bool,
 }
 
-impl Default for SessionRuntimeState {
-    fn default() -> Self {
-        Self {
-            model: None,
-            provider: None,
-            profile: None,
-            branch: None,
-            personality: None,
-            home: None,
-            budget: None,
-            verbose: false,
-            yolo: false,
-            reasoning: false,
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Gateway
@@ -464,11 +449,10 @@ impl Gateway {
         }
 
         // Slash commands are executed directly by the gateway command runtime.
-        if incoming.text.trim_start().starts_with('/') {
-            if self.execute_slash_command(incoming, &session_key).await? {
+        if incoming.text.trim_start().starts_with('/')
+            && self.execute_slash_command(incoming, &session_key).await? {
                 return Ok(());
             }
-        }
 
         let enriched_text = self
             .enrich_message_with_transcription(&self.enrich_message_with_vision(&incoming.text));
@@ -487,10 +471,10 @@ impl Gateway {
 
         // 5. Process through agent loop (streaming or non-streaming)
         if self.config.streaming_enabled {
-            self.route_streaming(&incoming, messages, &session_key)
+            self.route_streaming(incoming, messages, &session_key)
                 .await?;
         } else {
-            self.route_non_streaming(&incoming, messages, &session_key)
+            self.route_non_streaming(incoming, messages, &session_key)
                 .await?;
         }
 

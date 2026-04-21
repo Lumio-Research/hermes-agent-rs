@@ -1,9 +1,9 @@
 [package]
 name = "hermes-cli"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 description = "CLI/TUI interface for Hermes Agent"
 
 [features]
