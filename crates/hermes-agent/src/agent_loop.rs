@@ -1706,6 +1706,9 @@ impl AgentLoop {
             }
             "openrouter" => {
                 let mut p = OpenRouterProvider::new(&api_key).with_model(model_name);
+                if let Some(url) = base_url {
+                    p = p.with_base_url(url);
+                }
                 if let Some(pool) = credential_pool {
                     p = p.with_credential_pool(pool.clone());
                 }
@@ -2106,6 +2109,9 @@ impl AgentLoop {
         let model = route
             .map(|r| r.model.as_str())
             .unwrap_or(self.config.model.as_str());
+        let (_, request_model) = self.extract_provider_and_model(model);
+        let (_, primary_request_model) =
+            self.extract_provider_and_model(self.config.model.as_str());
         if let Some(rt) = route {
             if let Some(ref label) = rt.route_label {
                 tracing::debug!(%label, model = %rt.model, ?rt.signature, "smart model route");
@@ -2151,7 +2157,7 @@ impl AgentLoop {
                                 tool_schemas,
                                 self.config.max_tokens,
                                 self.config.temperature,
-                                Some(model),
+                                Some(request_model),
                                 extra_body_for_call.as_ref(),
                             )
                             .await
@@ -2168,7 +2174,7 @@ impl AgentLoop {
                                 tool_schemas,
                                 self.config.max_tokens,
                                 self.config.temperature,
-                                Some(self.config.model.as_str()),
+                                Some(primary_request_model),
                                 default_extra_body.as_ref(),
                             )
                             .await
@@ -2181,7 +2187,7 @@ impl AgentLoop {
                         tool_schemas,
                         self.config.max_tokens,
                         self.config.temperature,
-                        Some(model),
+                        Some(request_model),
                         default_extra_body.as_ref(),
                     )
                     .await
@@ -2231,7 +2237,9 @@ impl AgentLoop {
                         ErrorClass::RateLimit | ErrorClass::Retryable => {
                             if attempt >= effective_max_retries {
                                 if let Some(ref fallback) = retry.fallback_model {
-                                    if model != fallback.as_str() {
+                                    if request_model != fallback.as_str() {
+                                        let (_, fallback_request_model) =
+                                            self.extract_provider_and_model(fallback);
                                         tracing::info!(
                                             "All retries exhausted on {}. Trying fallback: {}",
                                             model,
@@ -2244,7 +2252,7 @@ impl AgentLoop {
                                                 tool_schemas,
                                                 self.config.max_tokens,
                                                 self.config.temperature,
-                                                Some(fallback),
+                                                Some(fallback_request_model),
                                                 default_extra_body.as_ref(),
                                             )
                                             .await;
@@ -2319,6 +2327,9 @@ impl AgentLoop {
     ) -> Result<StreamCollectOutcome, AgentError> {
         let api_messages = self.messages_for_api_call(ctx);
         let default_extra_body = self.extra_body_for_api_mode(&self.config.api_mode);
+        let (_, active_request_model) = self.extract_provider_and_model(active_model);
+        let (_, primary_request_model) =
+            self.extract_provider_and_model(self.config.model.as_str());
         let mut stream = if let Some(rt) = route {
             let (provider_name, model_name) = self.extract_provider_and_model(active_model);
             let mode = rt.api_mode.as_ref().unwrap_or(&self.config.api_mode);
@@ -2338,7 +2349,7 @@ impl AgentLoop {
                     tool_schemas,
                     self.config.max_tokens,
                     self.config.temperature,
-                    Some(active_model),
+                    Some(model_name),
                     extra_body_for_call.as_ref(),
                 ),
                 Err(e) => {
@@ -2352,7 +2363,7 @@ impl AgentLoop {
                         tool_schemas,
                         self.config.max_tokens,
                         self.config.temperature,
-                        Some(self.config.model.as_str()),
+                        Some(primary_request_model),
                         default_extra_body.as_ref(),
                     )
                 }
@@ -2363,7 +2374,7 @@ impl AgentLoop {
                 tool_schemas,
                 self.config.max_tokens,
                 self.config.temperature,
-                Some(active_model),
+                Some(active_request_model),
                 default_extra_body.as_ref(),
             )
         };
@@ -5001,6 +5012,66 @@ mod tests {
         let seen = seen.lock().expect("seen lock");
         assert!(seen.iter().any(|name| name == "pre_api_request"));
         assert!(seen.iter().any(|name| name == "post_api_request"));
+    }
+
+    #[test]
+    fn test_llm_request_model_strips_provider_prefix() {
+        use futures::stream::BoxStream;
+
+        struct CaptureModelProvider {
+            seen_model: Arc<std::sync::Mutex<Option<String>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl LlmProvider for CaptureModelProvider {
+            async fn chat_completion(
+                &self,
+                _messages: &[Message],
+                _tools: &[ToolSchema],
+                _max_tokens: Option<u32>,
+                _temperature: Option<f64>,
+                model: Option<&str>,
+                _extra_body: Option<&serde_json::Value>,
+            ) -> Result<hermes_core::LlmResponse, AgentError> {
+                *self.seen_model.lock().expect("seen_model lock") = model.map(|m| m.to_string());
+                Ok(hermes_core::LlmResponse {
+                    message: Message::assistant("done"),
+                    usage: None,
+                    model: "dummy".into(),
+                    finish_reason: Some("stop".into()),
+                })
+            }
+
+            fn chat_completion_stream(
+                &self,
+                _messages: &[Message],
+                _tools: &[ToolSchema],
+                _max_tokens: Option<u32>,
+                _temperature: Option<f64>,
+                _model: Option<&str>,
+                _extra_body: Option<&serde_json::Value>,
+            ) -> BoxStream<'static, Result<StreamChunk, AgentError>> {
+                futures::stream::empty().boxed()
+            }
+        }
+
+        let seen_model = Arc::new(std::sync::Mutex::new(None));
+        let provider = CaptureModelProvider {
+            seen_model: seen_model.clone(),
+        };
+        let config = AgentConfig {
+            model: "openrouter:deepseek/deepseek-v3.2".to_string(),
+            ..AgentConfig::default()
+        };
+        let agent = AgentLoop::new(config, Arc::new(ToolRegistry::new()), Arc::new(provider));
+
+        let rt = tokio::runtime::Runtime::new().expect("runtime");
+        let _ = rt
+            .block_on(agent.run(vec![Message::user("hello")], None))
+            .expect("agent run should succeed");
+
+        let seen = seen_model.lock().expect("seen_model lock");
+        assert_eq!(seen.as_deref(), Some("deepseek/deepseek-v3.2"));
     }
 
     #[test]

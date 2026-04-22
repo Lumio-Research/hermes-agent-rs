@@ -522,6 +522,7 @@ pub fn load_from_json(path: &Path) -> Result<GatewayConfig, ConfigError> {
 ///   OPENAI_API_KEY             -> llm_providers["openai"].api_key
 ///   ANTHROPIC_API_KEY          -> llm_providers["anthropic"].api_key
 ///   OPENROUTER_API_KEY         -> llm_providers["openrouter"].api_key
+///   OPENROUTER_BASE_URL        -> llm_providers["openrouter"].base_url
 ///   DASHSCOPE_API_KEY          -> llm_providers["qwen"].api_key
 ///   MOONSHOT_API_KEY           -> llm_providers["kimi"].api_key
 ///   MINIMAX_API_KEY            -> llm_providers["minimax"].api_key
@@ -603,6 +604,13 @@ pub fn apply_env_overrides(config: &mut GatewayConfig) {
         for provider in config.llm_providers.values_mut() {
             provider.base_url = Some(v.clone());
         }
+    }
+    if let Ok(v) = std::env::var("OPENROUTER_BASE_URL") {
+        config
+            .llm_providers
+            .entry("openrouter".to_string())
+            .or_default()
+            .base_url = Some(v);
     }
 
     crate::python_platform_env::apply_python_named_platform_env(config);
@@ -698,6 +706,30 @@ mod tests {
         // Simulate env var (we can't easily set env vars in tests, so test the logic directly)
         config.model = Some("env-model".into());
         assert_eq!(config.model.as_deref(), Some("env-model"));
+    }
+
+    #[test]
+    fn env_overrides_openrouter_base_url() {
+        let mut config = GatewayConfig::default();
+        // SAFETY: test-only scoped env mutation.
+        unsafe {
+            std::env::set_var(
+                "OPENROUTER_BASE_URL",
+                "https://example-openrouter.invalid/v1",
+            );
+        }
+        apply_env_overrides(&mut config);
+        assert_eq!(
+            config
+                .llm_providers
+                .get("openrouter")
+                .and_then(|p| p.base_url.as_deref()),
+            Some("https://example-openrouter.invalid/v1")
+        );
+        // SAFETY: test-only cleanup.
+        unsafe {
+            std::env::remove_var("OPENROUTER_BASE_URL");
+        }
     }
 
     #[test]

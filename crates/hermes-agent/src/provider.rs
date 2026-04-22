@@ -1301,6 +1301,14 @@ impl OpenRouterProvider {
         }
     }
 
+    /// Set a custom base URL (OpenAI-compatible OpenRouter proxy).
+    pub fn with_base_url(self, base_url: impl Into<String>) -> Self {
+        Self {
+            inner: self.inner.with_base_url(base_url),
+            ..self
+        }
+    }
+
     /// Set the HTTP-Referer header (required by OpenRouter).
     pub fn with_http_referer(mut self, referer: impl Into<String>) -> Self {
         self.http_referer = Some(referer.into());

@@ -585,7 +585,10 @@ pub fn build_provider(config: &GatewayConfig, model: &str) -> Arc<dyn LlmProvide
             Arc::new(p)
         }
         "openrouter" => {
-            let p = OpenRouterProvider::new(&api_key).with_model(model_name);
+            let mut p = OpenRouterProvider::new(&api_key).with_model(model_name);
+            if let Some(url) = base_url {
+                p = p.with_base_url(url);
+            }
             Arc::new(p)
         }
         "qwen" => {
