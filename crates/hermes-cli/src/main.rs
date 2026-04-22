@@ -531,6 +531,15 @@ async fn run_gateway(cli: Cli, action: Option<String>) -> Result<(), AgentError>
             let skill_provider: Arc<dyn hermes_core::SkillProvider> =
                 Arc::new(SkillManager::new(skill_store));
             hermes_tools::register_builtin_tools(&tool_registry, terminal_backend, skill_provider);
+            let live_count =
+                hermes_cli::live_messaging::enable_live_messaging_tool(&config, &tool_registry)
+                    .await;
+            if live_count > 0 {
+                tracing::info!(
+                    adapters = live_count,
+                    "Enabled live send_message delivery backend for gateway agent runtime"
+                );
+            }
             let agent_registry = Arc::new(bridge_tool_registry(&tool_registry));
             let agent_tools_for_msg = agent_registry.clone();
             let agent_tools_for_stream = agent_registry.clone();

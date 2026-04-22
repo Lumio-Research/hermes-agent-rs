@@ -598,6 +598,14 @@ pub async fn handle_cli_chat(
     let skill_provider: Arc<dyn hermes_core::SkillProvider> =
         Arc::new(SkillManager::new(skill_store));
     hermes_tools::register_builtin_tools(&tool_registry, terminal_backend, skill_provider);
+    let live_count =
+        crate::live_messaging::enable_live_messaging_tool(&config, &tool_registry).await;
+    if live_count > 0 {
+        println!(
+            "[send_message live delivery enabled via {} configured adapter(s)]",
+            live_count
+        );
+    }
     let agent_tool_registry = Arc::new(crate::app::bridge_tool_registry(&tool_registry));
 
     let agent_config = crate::app::build_agent_config(&config, &current_model);

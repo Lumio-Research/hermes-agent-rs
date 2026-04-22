@@ -9,8 +9,25 @@ permissions:
   contents: write
 
 jobs:
+  release-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Build native release binary
+        run: cargo build --release -p hermes-cli
+      - name: Smoke test release binary
+        run: bash scripts/ci/smoke.sh
+      - name: Key path E2E
+        run: bash scripts/ci/keypath-e2e.sh
+
   cross-build:
     runs-on: ubuntu-latest
+    needs: release-smoke
     strategy:
       matrix:
         include:
@@ -55,6 +72,7 @@ jobs:
           files: ${{ matrix.artifact }}
 
   macos-build:
+    needs: release-smoke
     strategy:
       matrix:
         include:

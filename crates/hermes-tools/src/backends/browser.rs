@@ -11,9 +11,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use futures::{SinkExt, StreamExt};
 use reqwest::Client;
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
+use tokio_tungstenite::connect_async;
+use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 use crate::tools::browser::BrowserBackend;
 use hermes_config::load_config;
@@ -24,6 +27,8 @@ use hermes_core::ToolError;
 
 const DEFAULT_BROWSER_USE_BASE_URL: &str = "https://api.browser-use.com/api/v3";
 const DEFAULT_BROWSERBASE_BASE_URL: &str = "https://api.browserbase.com";
+const DEFAULT_FIRECRAWL_BASE_URL: &str = "https://api.firecrawl.dev";
+const DEFAULT_FIRECRAWL_BROWSER_TTL_SECS: u32 = 300;
 const DEFAULT_MANAGED_BROWSER_USE_TIMEOUT_MINUTES: u32 = 5;
 const DEFAULT_MANAGED_PROXY_COUNTRY_CODE: &str = "us";
 
@@ -74,6 +79,11 @@ struct BrowserbaseCloudProvider {
     client: Client,
 }
 
+#[derive(Clone)]
+struct FirecrawlCloudProvider {
+    client: Client,
+}
+
 pub struct CloudBrowserBackendAdapter {
     provider: Arc<dyn CloudBrowserProvider>,
     state: Mutex<CloudBackendState>,
@@ -97,6 +107,7 @@ enum BrowserRuntimeKind {
     CamoFox,
     BrowserUse,
     Browserbase,
+    Firecrawl,
     Unsupported(String),
 }
 
@@ -168,12 +179,59 @@ impl CdpBrowserBackend {
     /// Send a CDP command via HTTP/WebSocket discovery shim.
     async fn cdp_command(&self, method: &str, params: Value) -> Result<Value, ToolError> {
         let target = self.resolve_target().await?;
-        Ok(json!({
+        let (mut ws, _) = connect_async(&target).await.map_err(|e| {
+            ToolError::ExecutionFailed(format!("Failed to connect to CDP websocket {target}: {e}"))
+        })?;
+
+        static NEXT_CDP_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let request_id = NEXT_CDP_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let payload = json!({
+            "id": request_id,
             "method": method,
             "params": params,
-            "target": target,
-            "status": "sent",
-        }))
+        })
+        .to_string();
+        ws.send(WsMessage::Text(payload)).await.map_err(|e| {
+            ToolError::ExecutionFailed(format!("Failed to send CDP command {method}: {e}"))
+        })?;
+
+        while let Some(frame) = ws.next().await {
+            let frame = frame.map_err(|e| {
+                ToolError::ExecutionFailed(format!("CDP stream read failed for {method}: {e}"))
+            })?;
+            let text = match frame {
+                WsMessage::Text(t) => t,
+                WsMessage::Binary(bytes) => String::from_utf8(bytes).map_err(|e| {
+                    ToolError::ExecutionFailed(format!("CDP binary frame decode failed: {e}"))
+                })?,
+                WsMessage::Ping(_) | WsMessage::Pong(_) => continue,
+                WsMessage::Close(_) => {
+                    return Err(ToolError::ExecutionFailed(format!(
+                        "CDP connection closed before response for {method}"
+                    )));
+                }
+                WsMessage::Frame(_) => continue,
+            };
+
+            let parsed: Value = serde_json::from_str(&text).map_err(|e| {
+                ToolError::ExecutionFailed(format!("Failed to parse CDP response JSON: {e}"))
+            })?;
+            if parsed.get("id").and_then(|v| v.as_u64()) != Some(request_id) {
+                continue;
+            }
+            if let Some(err) = parsed.get("error") {
+                return Err(ToolError::ExecutionFailed(format!(
+                    "CDP command {method} failed: {err}"
+                )));
+            }
+            let result = parsed.get("result").cloned().unwrap_or(parsed);
+            let _ = ws.close(None).await;
+            return Ok(result);
+        }
+
+        Err(ToolError::ExecutionFailed(format!(
+            "No CDP response received for command {method}"
+        )))
     }
 }
 
@@ -329,6 +387,68 @@ impl CloudBrowserProvider for BrowserbaseCloudProvider {
     }
 }
 
+#[async_trait]
+impl CloudBrowserProvider for FirecrawlCloudProvider {
+    fn provider_key(&self) -> &'static str {
+        "firecrawl"
+    }
+
+    fn is_configured(&self) -> bool {
+        firecrawl_config().is_some()
+    }
+
+    async fn create_session(&self, task_id: &str) -> Result<CloudBrowserSession, ToolError> {
+        let config = firecrawl_config().ok_or_else(|| {
+            ToolError::ExecutionFailed(
+                "Firecrawl requires FIRECRAWL_API_KEY environment variable.".into(),
+            )
+        })?;
+        let response = self
+            .client
+            .post(format!("{}/v2/browser", config.base_url))
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", config.api_key))
+            .json(&json!({"ttl": config.browser_ttl_secs}))
+            .send()
+            .await
+            .map_err(|e| {
+                ToolError::ExecutionFailed(format!("Firecrawl create session failed: {e}"))
+            })?;
+        let status = response.status();
+        let payload: Value = response.json().await.map_err(|e| {
+            ToolError::ExecutionFailed(format!("Firecrawl create session json failed: {e}"))
+        })?;
+        if !status.is_success() {
+            return Err(ToolError::ExecutionFailed(format!(
+                "Failed to create Firecrawl session: {} {}",
+                status, payload
+            )));
+        }
+        let session_id = payload
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let cdp_url = payload
+            .get("cdpUrl")
+            .or_else(|| payload.get("connectUrl"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if session_id.is_empty() || cdp_url.is_empty() {
+            return Err(ToolError::ExecutionFailed(
+                "Firecrawl session response missing id/cdpUrl".into(),
+            ));
+        }
+        Ok(CloudBrowserSession {
+            provider: self.provider_key(),
+            session_id: format!("{task_id}:{session_id}"),
+            cdp_url,
+            transport: "direct",
+        })
+    }
+}
+
 impl CloudBrowserBackendAdapter {
     fn new(provider: Arc<dyn CloudBrowserProvider>) -> Self {
         Self {
@@ -370,6 +490,11 @@ impl AutoBrowserBackend {
             ),
             BrowserRuntimeKind::Browserbase => ResolvedBrowserBackend::Cloud(
                 CloudBrowserBackendAdapter::new(Arc::new(BrowserbaseCloudProvider {
+                    client: Client::new(),
+                })),
+            ),
+            BrowserRuntimeKind::Firecrawl => ResolvedBrowserBackend::Cloud(
+                CloudBrowserBackendAdapter::new(Arc::new(FirecrawlCloudProvider {
                     client: Client::new(),
                 })),
             ),
@@ -792,6 +917,12 @@ struct BrowserbaseConfig {
     base_url: String,
 }
 
+struct FirecrawlConfig {
+    api_key: String,
+    base_url: String,
+    browser_ttl_secs: u32,
+}
+
 fn browser_use_config() -> Option<BrowserUseConfig> {
     let direct_api_key = std::env::var("BROWSER_USE_API_KEY")
         .ok()
@@ -835,6 +966,28 @@ fn browserbase_config() -> Option<BrowserbaseConfig> {
     })
 }
 
+fn firecrawl_config() -> Option<FirecrawlConfig> {
+    let api_key = std::env::var("FIRECRAWL_API_KEY")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())?;
+    let base_url = std::env::var("FIRECRAWL_API_URL")
+        .ok()
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| DEFAULT_FIRECRAWL_BASE_URL.to_string());
+    let browser_ttl_secs = std::env::var("FIRECRAWL_BROWSER_TTL")
+        .ok()
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .filter(|ttl| *ttl > 0)
+        .unwrap_or(DEFAULT_FIRECRAWL_BROWSER_TTL_SECS);
+    Some(FirecrawlConfig {
+        api_key,
+        base_url,
+        browser_ttl_secs,
+    })
+}
+
 fn looks_like_cdp_websocket(endpoint: &str) -> bool {
     let lower = endpoint.trim().to_ascii_lowercase();
     lower.starts_with("ws://")
@@ -872,7 +1025,7 @@ fn resolve_browser_runtime_kind() -> BrowserRuntimeKind {
             "camofox" => BrowserRuntimeKind::CamoFox,
             "browser-use" => BrowserRuntimeKind::BrowserUse,
             "browserbase" => BrowserRuntimeKind::Browserbase,
-            "firecrawl" => BrowserRuntimeKind::Unsupported(provider),
+            "firecrawl" => BrowserRuntimeKind::Firecrawl,
             _ => BrowserRuntimeKind::Local,
         };
     }
@@ -937,6 +1090,9 @@ mod tests {
                 "BROWSERBASE_API_KEY",
                 "BROWSERBASE_PROJECT_ID",
                 "BROWSERBASE_BASE_URL",
+                "FIRECRAWL_API_KEY",
+                "FIRECRAWL_API_URL",
+                "FIRECRAWL_BROWSER_TTL",
                 "TOOL_GATEWAY_USER_TOKEN",
                 "HERMES_ENABLE_NOUS_MANAGED_TOOLS",
                 "CAMOFOX_CDP_URL",
@@ -1023,6 +1179,21 @@ mod tests {
         assert_eq!(
             resolve_browser_runtime_kind(),
             BrowserRuntimeKind::Browserbase
+        );
+    }
+
+    #[test]
+    fn runtime_respects_explicit_firecrawl_provider() {
+        let _g = EnvScope::new();
+        std::fs::write(
+            std::path::Path::new(&std::env::var("HERMES_HOME").unwrap()).join("config.yaml"),
+            "browser:\n  cloud_provider: firecrawl\n",
+        )
+        .unwrap();
+        std::env::set_var("FIRECRAWL_API_KEY", "fc-test-key");
+        assert_eq!(
+            resolve_browser_runtime_kind(),
+            BrowserRuntimeKind::Firecrawl
         );
     }
 

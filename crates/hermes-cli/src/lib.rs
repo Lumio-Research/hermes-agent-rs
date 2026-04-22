@@ -37,6 +37,7 @@ pub mod copilot_auth;
 pub mod doctor;
 pub mod env_loader;
 pub mod gateway_cmd;
+pub mod live_messaging;
 pub mod lumio;
 pub mod mcp_config;
 pub mod model_switch;

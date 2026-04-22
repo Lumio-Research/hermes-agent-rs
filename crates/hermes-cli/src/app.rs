@@ -130,6 +130,14 @@ impl App {
         let skill_provider: Arc<dyn hermes_core::SkillProvider> =
             Arc::new(SkillManager::new(skill_store));
         hermes_tools::register_builtin_tools(&tool_registry, terminal_backend, skill_provider);
+        let live_count =
+            crate::live_messaging::enable_live_messaging_tool(&config, &tool_registry).await;
+        if live_count > 0 {
+            tracing::info!(
+                adapters = live_count,
+                "Enabled live send_message delivery backend for CLI session"
+            );
+        }
         let agent_tool_registry = Arc::new(bridge_tool_registry(&tool_registry));
 
         let agent_config = build_agent_config(&config, &current_model);

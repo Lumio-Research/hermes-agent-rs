@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ Hermes Agent
+# ⚡ Hermes Agent `v0.1`
 
 **The self-evolving AI agent. One binary. Every platform.**
 
@@ -13,6 +13,8 @@ Rust rewrite of [Hermes Agent](https://github.com/NousResearch/hermes-agent) by 
 </div>
 
 ---
+
+> **v0.1 Status:** Core agent loop, 10 LLM providers, 30 tool backends, 17 platform adapters, memory system, and CLI/TUI are production-ready. Known limitations: parity roadmap modules outside this runtime surface are still being completed (see `PARITY_PLAN.md`).
 
 ## Why Hermes?
 
@@ -126,8 +128,10 @@ Contributions welcome. Run the test suite before submitting:
 
 ```bash
 cargo test --workspace        # 1,428 tests
-cargo clippy --workspace      # Lint
+cargo clippy --workspace --all-targets -- -D warnings  # Lint (warnings fail CI)
 cargo fmt --all --check       # Format
+bash scripts/ci/smoke.sh      # Release binary smoke check
+bash scripts/ci/keypath-e2e.sh  # Core end-to-end paths
 ```
 
 See [AGENTS.md](AGENTS.md) for architecture details and coding conventions.
