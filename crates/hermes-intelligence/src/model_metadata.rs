@@ -358,7 +358,7 @@ pub fn get_model_context_length(model: &str) -> u64 {
 
     // Hardcoded defaults (fuzzy match, longest key first)
     let mut entries: Vec<_> = DEFAULT_CONTEXT_LENGTHS.to_vec();
-    entries.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    entries.sort_by_key(|b| std::cmp::Reverse(b.0.len()));
     for (key, length) in entries {
         if model_lower.contains(key) {
             return length;

@@ -98,11 +98,11 @@ impl FileMemoryBackend {
             MEMORY_CHAR_LIMIT
         };
         let current = entries.join(ENTRY_DELIMITER).chars().count();
-        let pct = if limit > 0 {
-            ((current * 100) / limit).min(100)
-        } else {
-            0
-        };
+        let pct = current
+            .checked_mul(100)
+            .and_then(|v| v.checked_div(limit))
+            .unwrap_or(0)
+            .min(100);
         json!({
             "success": true,
             "target": target,

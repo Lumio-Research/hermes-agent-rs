@@ -186,7 +186,7 @@ pub fn format_terminal(report: &InsightsReport) -> String {
 
         // Top 5 busiest hours.
         let mut busy_hours = report.activity.by_hour.clone();
-        busy_hours.sort_by(|a, b| b.count.cmp(&a.count));
+        busy_hours.sort_by_key(|b| std::cmp::Reverse(b.count));
         let busy_hours: Vec<_> = busy_hours
             .into_iter()
             .filter(|h| h.count > 0)

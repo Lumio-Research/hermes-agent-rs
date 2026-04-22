@@ -71,10 +71,10 @@ impl HookType {
 // Hook payload schema validation
 // ---------------------------------------------------------------------------
 
-fn expect_obj<'a>(
-    ctx: &'a Value,
+fn expect_obj(
+    ctx: &Value,
     hook: HookType,
-) -> Result<&'a serde_json::Map<String, Value>, String> {
+) -> Result<&serde_json::Map<String, Value>, String> {
     ctx.as_object()
         .ok_or_else(|| format!("{} context must be a JSON object", hook.as_str()))
 }

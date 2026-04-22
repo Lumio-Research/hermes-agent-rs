@@ -330,7 +330,7 @@ pub fn get_pricing_entry(
         .iter()
         .filter(|((p, m), _)| *p == route.provider.as_str() && model_lower.contains(*m))
         .collect();
-    candidates.sort_by(|a, b| b.0 .1.len().cmp(&a.0 .1.len()));
+    candidates.sort_by_key(|b| std::cmp::Reverse(b.0 .1.len()));
     candidates.first().map(|(_, entry)| (*entry).clone())
 }
 
