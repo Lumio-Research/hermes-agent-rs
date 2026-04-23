@@ -722,7 +722,13 @@ pub fn build_provider(config: &GatewayConfig, model: &str) -> Arc<dyn LlmProvide
         "openrouter" => Arc::new(OpenRouterProvider::new(&api_key).with_model(model_name)),
         "qwen" => Arc::new(QwenProvider::new(&api_key).with_model(model_name)),
         "kimi" | "moonshot" => Arc::new(KimiProvider::new(&api_key).with_model(model_name)),
-        "minimax" => Arc::new(MiniMaxProvider::new(&api_key).with_model(model_name)),
+        "minimax" => {
+            let mut p = MiniMaxProvider::new(&api_key).with_model(model_name);
+            if let Some(url) = base_url {
+                p = p.with_base_url(url);
+            }
+            Arc::new(p)
+        }
         "nous" => Arc::new(NousProvider::new(&api_key).with_model(model_name)),
         "copilot" => Arc::new(
             CopilotProvider::new(
