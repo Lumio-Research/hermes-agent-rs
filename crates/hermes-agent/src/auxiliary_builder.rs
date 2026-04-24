@@ -136,14 +136,30 @@ pub fn build_default_auxiliary_client(
         "https://api.moonshot.ai/v1",
         default_models::KIMI,
     );
-    register_direct_key(
-        &mut builder,
-        &mut summary,
-        "MINIMAX_API_KEY",
-        "minimax",
-        "https://api.minimax.io/v1",
-        default_models::MINIMAX,
-    );
+    // MiniMax — supports MINIMAX_BASE_URL override (mirrors OPENAI_BASE_URL pattern)
+    if let Ok(key) = std::env::var("MINIMAX_API_KEY") {
+        if !key.trim().is_empty() {
+            let base_url = std::env::var("MINIMAX_BASE_URL")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "https://api.minimax.io/v1".to_string());
+            let provider: Arc<dyn LlmProvider> = Arc::new(GenericProvider::new(
+                base_url,
+                key.trim(),
+                default_models::MINIMAX,
+            ));
+            builder = builder.add_candidate(ProviderCandidate::new(
+                AuxiliarySource::DirectKey("minimax".to_string()),
+                default_models::MINIMAX,
+                provider,
+            ));
+            summary.registered.push("minimax".into());
+        } else {
+            summary.skipped.push("minimax (empty key)".into());
+        }
+    } else {
+        summary.skipped.push("minimax (no key)".into());
+    }
     register_direct_key(
         &mut builder,
         &mut summary,
