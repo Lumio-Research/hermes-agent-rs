@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["tenant", "image", "config"],
+  "properties": {
+    "tenant": {
+      "type": "object",
+      "required": ["id", "displayName", "workspaceId", "plane"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Globally unique tenant identifier."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "plane": {
+          "type": "string",
+          "enum": ["customer-runtime", "customer-sandbox", "customer-prod"]
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pullPolicy": {
+          "type": "string"
+        }
+      }
+    },
+    "secretRefs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "runtimeSecret": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "stringData": {
+          "type": "object"
+        }
+      }
+    },
+    "knowledgeBase": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "existingClaim": {
+          "type": "string"
+        },
+        "mountPath": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string"
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "required": ["fileName", "mountPath", "data"],
+      "properties": {
+        "existingConfigMap": {
+          "type": "string"
+        },
+        "mountPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fileName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "data": {
+          "type": "object",
+          "required": ["customer_service"],
+          "properties": {
+            "customer_service": {
+              "type": "object",
+              "required": ["enabled", "inboxes"],
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "default_system_prompt": {
+                  "type": "string"
+                },
+                "inboxes": {
+                  "type": "object",
+                  "description": "Per-inbox customer service bot configuration."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

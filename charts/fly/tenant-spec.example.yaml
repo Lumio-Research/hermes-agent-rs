@@ -1,0 +1,70 @@
+apiVersion: hermes.ai/v1alpha1
+kind: TenantRuntime
+
+metadata:
+  tenantId: acme
+  displayName: ACME Support
+  environment: prod
+
+spec:
+  deployment:
+    appName: hermes-tenant-acme
+    region: hkg
+    image:
+      repository: ghcr.io/your-org/hermes-runtime
+      tag: v0.1.0
+    vmSize: shared-cpu-1x
+    minMachines: 1
+    internalPort: 8080
+
+  domain:
+    hostname: support-acme.example.com
+    enableTls: true
+
+  runtime:
+    logLevel: info
+    hermesHome: /data/hermes
+    publicBaseUrl: https://support-acme.example.com
+
+  customerService:
+    enabled: true
+    defaultSystemPrompt: |
+      你是 ACME 的智能客服。
+      请优先根据知识库和业务工具回答问题。
+      如果不确定，请明确说明并建议转人工客服。
+    inboxes:
+      telegram-main:
+        platform: telegram
+        botTokenSecretRef: TELEGRAM_BOT_TOKEN
+        allowedSkills:
+          - faq-lookup
+          - order-query
+        escalation:
+          enabled: true
+      web-widget:
+        platform: web
+        widgetSecretRef: WEB_WIDGET_SECRET
+        allowedSkills:
+          - faq-lookup
+          - product-info
+        escalation:
+          enabled: true
+
+  knowledgeBase:
+    enabled: true
+    mountPath: /data/hermes/kb
+    volume:
+      name: hermes-kb-acme
+      sizeGb: 10
+
+  integrations:
+    orderApi:
+      enabled: true
+      baseUrl: https://orders.example.internal
+      apiKeySecretRef: ORDER_API_KEY
+
+  secrets:
+    - OPENAI_API_KEY
+    - TELEGRAM_BOT_TOKEN
+    - WEB_WIDGET_SECRET
+    - ORDER_API_KEY

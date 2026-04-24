@@ -1,0 +1,25 @@
+{
+  "name": "hermes-fly-tools",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TypeScript tools for Hermes Fly.io tenant provisioning",
+  "type": "module",
+  "scripts": {
+    "spec:help": "tsx spec-to-provision.ts --help",
+    "spec:convert": "tsx spec-to-provision.ts",
+    "cp:help": "tsx control-plane-deploy.ts --help",
+    "cp:deploy": "tsx control-plane-deploy.ts --action deploy",
+    "cp:rollback": "tsx control-plane-deploy.ts --action rollback",
+    "cp:status": "tsx control-plane-deploy.ts --action status"
+  },
+  "dependencies": {
+    "pg": "^8.16.3",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/pg": "^8.15.5",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

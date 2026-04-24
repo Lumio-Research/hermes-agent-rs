@@ -1,0 +1,117 @@
+nameOverride: ""
+fullnameOverride: ""
+
+tenant:
+  id: tenant-demo
+  displayName: Demo Tenant
+  workspaceId: ws-demo
+  plane: customer-runtime
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/your-org/hermes-runtime
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: tenant-demo.hermes.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1500m
+    memory: 2Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 75
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+networkPolicy:
+  enabled: false
+  ingressNamespaces: []
+  egressCidrs: []
+
+env:
+  RUST_LOG: info
+  HERMES_HTTP_ADDR: 0.0.0.0:8080
+
+extraEnv: []
+extraEnvFrom: []
+secretRefs: []
+
+config:
+  existingConfigMap: ""
+  mountPath: /etc/hermes
+  fileName: config.yaml
+  data:
+    model: gpt-4o-mini
+    streaming:
+      enabled: true
+    session:
+      enabled: true
+    customer_service:
+      enabled: true
+      default_system_prompt: |
+        你是租户专属客服助手，请优先基于知识库和业务工具回答问题。
+      inboxes: {}
+
+knowledgeBase:
+  enabled: false
+  existingClaim: ""
+  mountPath: /var/lib/hermes/knowledge
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+
+runtimeSecret:
+  create: false
+  name: ""
+  stringData: {}
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10

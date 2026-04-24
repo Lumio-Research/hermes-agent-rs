@@ -1,0 +1,11 @@
+{{- if not .Values.config.existingConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tenant-runtime.configMapName" . }}
+  labels:
+    {{- include "tenant-runtime.labels" . | nindent 4 }}
+data:
+  {{ .Values.config.fileName }}: |
+{{ toYaml .Values.config.data | indent 4 }}
+{{- end }}

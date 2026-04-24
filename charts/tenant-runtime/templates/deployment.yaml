@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tenant-runtime.fullname" . }}
+  labels:
+    {{- include "tenant-runtime.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "tenant-runtime.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tenant-runtime.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ toYaml .Values.config.data | sha256sum }}
+        {{- if .Values.runtimeSecret.create }}
+        checksum/runtime-secret: {{ toYaml .Values.runtimeSecret.stringData | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "tenant-runtime.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: tenant-runtime
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: HERMES_TENANT_ID
+              value: {{ .Values.tenant.id | quote }}
+            - name: HERMES_TENANT_NAME
+              value: {{ .Values.tenant.displayName | quote }}
+            - name: HERMES_WORKSPACE_ID
+              value: {{ .Values.tenant.workspaceId | quote }}
+            - name: HERMES_RUNTIME_PLANE
+              value: {{ .Values.tenant.plane | quote }}
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.runtimeSecret.create .Values.runtimeSecret.name .Values.secretRefs .Values.extraEnvFrom }}
+          envFrom:
+            {{- if or .Values.runtimeSecret.create .Values.runtimeSecret.name }}
+            - secretRef:
+                name: {{ include "tenant-runtime.runtimeSecretName" . }}
+            {{- end }}
+            {{- range .Values.secretRefs }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: {{ .Values.config.mountPath }}/{{ .Values.config.fileName }}
+              subPath: {{ .Values.config.fileName }}
+              readOnly: true
+            {{- if .Values.knowledgeBase.enabled }}
+            - name: knowledge-base
+              mountPath: {{ .Values.knowledgeBase.mountPath }}
+            {{- end }}
+          {{- if .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "tenant-runtime.configMapName" . }}
+        {{- if .Values.knowledgeBase.enabled }}
+        - name: knowledge-base
+          persistentVolumeClaim:
+            claimName: {{ include "tenant-runtime.pvcName" . }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

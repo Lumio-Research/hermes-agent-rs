@@ -1,0 +1,35 @@
+app = "{{ app_name }}"
+primary_region = "{{ region }}"
+
+[build]
+  image = "{{ image_repository }}:{{ image_tag }}"
+
+[env]
+  RUST_LOG = "{{ log_level }}"
+  HERMES_HTTP_ADDR = "0.0.0.0:8080"
+  HERMES_HOME = "{{ hermes_home }}"
+  HERMES_PUBLIC_BASE_URL = "{{ public_base_url }}"
+  HERMES_TENANT_ID = "{{ tenant_id }}"
+  HERMES_TENANT_NAME = "{{ tenant_name }}"
+  HERMES_ENVIRONMENT = "{{ environment }}"
+
+[mounts]
+  source = "{{ volume_name }}"
+  destination = "{{ hermes_home }}"
+
+[http_service]
+  internal_port = {{ internal_port }}
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = "stop"
+  min_machines_running = {{ min_machines }}
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "get"
+    path = "/healthz"
+
+[[vm]]
+  size = "{{ vm_size }}"

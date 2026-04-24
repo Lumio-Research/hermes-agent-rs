@@ -1,0 +1,17 @@
+{{- if and .Values.knowledgeBase.enabled (not .Values.knowledgeBase.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "tenant-runtime.pvcName" . }}
+  labels:
+    {{- include "tenant-runtime.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.knowledgeBase.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.knowledgeBase.size }}
+  {{- with .Values.knowledgeBase.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}
