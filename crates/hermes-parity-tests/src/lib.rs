@@ -1,8 +1,8 @@
 //! # hermes-parity-tests
 //!
 //! Week 0 **parity proof chain**: JSON fixtures (recorded from or verified against
-//! Python `research/hermes-agent`) plus a small harness that runs the **Rust**
-//! implementation and compares outputs.
+//! Python `research/hermes-agent` — baseline tag tracked in `PYTHON_BASELINE.txt`)
+//! plus a small harness that runs the **Rust** implementation and compares outputs.
 //!
 //! - Fixture layout: `fixtures/<logical_module>/*.json`
 //! - Schema: see [`harness::ParityFixtureFile`]

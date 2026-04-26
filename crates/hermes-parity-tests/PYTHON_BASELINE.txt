@@ -1,0 +1,10 @@
+Hermes Agent (Python) parity baseline:
+
+- Tag: v2026.4.23
+- Version name: v0.11.0
+- Release notes (local reference): research/hermes-agent/RELEASE_v0.11.0.md
+
+Notes:
+- Parity work in this crate is driven by JSON fixtures under fixtures/ and should be
+  recorded/verified against the Python tree at the tag above unless a case explicitly
+  documents a different source revision.
