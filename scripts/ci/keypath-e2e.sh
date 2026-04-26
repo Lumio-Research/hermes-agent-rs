@@ -11,7 +11,7 @@ echo "[keypath-e2e] gateway routing"
 cargo test -p hermes-gateway e2e_gateway_routes_message_and_replies -- --nocapture
 
 echo "[keypath-e2e] http command bridge"
-cargo test -p hermes-http command_help_runs_through_gateway -- --nocapture
+cargo test -p hermes-dashboard command_help_runs_through_gateway -- --nocapture
 
 echo "[keypath-e2e] cli model/status"
 cargo test -p hermes-cli e2e_cli_model_command_prints_current_model -- --nocapture

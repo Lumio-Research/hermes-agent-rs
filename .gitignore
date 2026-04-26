@@ -1,9 +1,12 @@
 /target
 # 第三方参考仓库通常放在上级目录 ~/workspace/research/GEO-AI
 GEO-AI/
+**/node_modules/
 **/*.rs.bk
 *.pdb
 .DS_Store
 .env
 *.log
 vout-endianness-analysis.md
+
+dist

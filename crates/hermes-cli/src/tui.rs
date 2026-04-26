@@ -154,8 +154,6 @@ pub struct TuiState {
     pub completions: Vec<String>,
     /// Currently selected completion index (if any).
     pub completion_index: Option<usize>,
-    /// Scroll offset for the message history.
-    pub scroll_offset: u16,
     /// Whether the agent is currently processing.
     pub processing: bool,
     /// Buffer for streaming agent output.
@@ -230,7 +228,6 @@ impl Default for TuiState {
             cursor_position: 0,
             completions: Vec::new(),
             completion_index: None,
-            scroll_offset: 0,
             processing: false,
             stream_buffer: String::new(),
             stream_muted: false,
@@ -279,20 +276,15 @@ impl TuiState {
         use crossterm::event::{KeyCode, KeyModifiers};
         let mods = key.modifiers;
         match key.code {
-            // Ctrl+Enter or Alt+Enter → submit
-            KeyCode::Enter
-                if mods.contains(KeyModifiers::CONTROL) || mods.contains(KeyModifiers::ALT) =>
-            {
-                // Submit is handled by the caller checking for this combo
-                false
-            }
-            // Plain Enter → insert newline (multi-line editing)
-            KeyCode::Enter => {
+            // Shift+Enter → insert newline (multi-line editing)
+            KeyCode::Enter if mods.contains(KeyModifiers::SHIFT) => {
                 self.input.insert(self.cursor_position, '\n');
                 self.cursor_position += 1;
                 self.selection_anchor = None;
                 false
             }
+            // Enter (with/without Ctrl/Alt) → submit handled by caller.
+            KeyCode::Enter => false,
             // Ctrl+A → move to beginning of line
             KeyCode::Char('a') if mods.contains(KeyModifiers::CONTROL) => {
                 self.cursor_position = self.line_start();
@@ -640,6 +632,18 @@ pub fn render(frame: &mut Frame, app: &App, state: &TuiState) {
     render_status(frame, app, state, status_area, &colors);
 }
 
+/// Rough wrapped-line count for a block of [`Line`]s at a given terminal width (Paragraph wraps).
+fn approx_wrapped_line_count(lines: &[Line], text_width: u16) -> usize {
+    let w = text_width.max(1) as usize;
+    lines
+        .iter()
+        .map(|line| {
+            let lw = line.width().max(1);
+            lw.saturating_add(w - 1) / w
+        })
+        .sum()
+}
+
 /// Render the message history area.
 fn render_messages(
     frame: &mut Frame,
@@ -693,11 +697,27 @@ fn render_messages(
             }
             hermes_core::MessageRole::System => {
                 if let Some(ref content) = msg.content {
-                    for line in content.lines() {
+                    // AgentLoop injects a large system prompt (tools/skills). It is required for the
+                    // model but is not a "chat transcript" line — dumping it makes the TUI look broken.
+                    const MAX_SYSTEM_LINES: usize = 6;
+                    const MAX_SYSTEM_CHARS: usize = 400;
+                    let line_count = content.lines().count();
+                    if content.len() > MAX_SYSTEM_CHARS || line_count > MAX_SYSTEM_LINES {
                         lines.push(Line::from(Span::styled(
-                            format!("[System] {}", line),
+                            format!(
+                                "[System] <{} lines (~{} chars) hidden — internal prompt, not chat>",
+                                line_count,
+                                content.len()
+                            ),
                             styles.system_message,
                         )));
+                    } else {
+                        for line in content.lines() {
+                            lines.push(Line::from(Span::styled(
+                                format!("[System] {}", line),
+                                styles.system_message,
+                            )));
+                        }
                     }
                 }
             }
@@ -714,12 +734,18 @@ fn render_messages(
         }
     }
 
+    let inner_width = area.width.max(1);
+    let total_lines = approx_wrapped_line_count(&lines, inner_width);
+    let visible = area.height as usize;
+    let scroll_y = total_lines.saturating_sub(visible).min(u16::MAX as usize) as u16;
+
     let paragraph = Paragraph::new(Text::from(lines))
         .block(Block::default().borders(Borders::NONE))
-        .wrap(Wrap { trim: false })
-        .scroll((state.scroll_offset, 0));
+        .wrap(Wrap { trim: false });
 
-    frame.render_widget(paragraph, area);
+    // Ratatui Paragraph::scroll is (y, x); y skips wrapped lines from the top. Pin to bottom so
+    // new replies stay in view (line_count on Paragraph is unstable/private in ratatui 0.29).
+    frame.render_widget(paragraph.scroll((scroll_y, 0)), area);
 }
 
 /// Render the auto-completion suggestions.
@@ -772,7 +798,7 @@ fn render_input(
         if state.history_search_active {
             format!("(reverse-i-search)`{}': ", state.history_search_query)
         } else {
-            "Type a message (Enter=newline, Ctrl+Enter=send)...".to_string()
+            "Type a message (Enter=send, Shift+Enter=newline)...".to_string()
         }
     } else if state.history_search_active {
         format!(
@@ -901,10 +927,11 @@ pub async fn run(mut app: App) -> Result<(), AgentError> {
                                 break;
                             }
 
-                            // Ctrl+Enter or Alt+Enter submits the input
-                            let is_submit = (key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
-                                || key.modifiers.contains(crossterm::event::KeyModifiers::ALT))
-                                && key.code == crossterm::event::KeyCode::Enter;
+                            // Enter submits the input; Shift+Enter inserts newline.
+                            let is_submit = key.code == crossterm::event::KeyCode::Enter
+                                && !key
+                                    .modifiers
+                                    .contains(crossterm::event::KeyModifiers::SHIFT);
 
                             if is_submit {
                                 let input = state.input.clone();

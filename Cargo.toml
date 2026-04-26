@@ -1,5 +1,6 @@
 [workspace]
 resolver = "2"
+exclude = []
 members = [
     "crates/hermes-core",
     "crates/hermes-agent",
@@ -14,14 +15,17 @@ members = [
     "crates/hermes-intelligence",
     "crates/hermes-acp",
     "crates/hermes-eval",
-    "crates/hermes-http",
+    "crates/hermes-dashboard",
     "crates/hermes-auth",
     "crates/hermes-telemetry",
     "crates/hermes-parity-tests",
+    "crates/hermes-bus",
+    "crates/hermes-runtime",
+    "crates/hermes-app/src-tauri",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/nousresearch/hermes-agent-rust"
@@ -41,10 +45,12 @@ hermes-config = { path = "crates/hermes-config" }
 hermes-intelligence = { path = "crates/hermes-intelligence" }
 hermes-acp = { path = "crates/hermes-acp" }
 hermes-eval = { path = "crates/hermes-eval" }
-hermes-http = { path = "crates/hermes-http" }
+hermes-dashboard = { path = "crates/hermes-dashboard" }
 hermes-auth = { path = "crates/hermes-auth" }
 hermes-telemetry = { path = "crates/hermes-telemetry" }
 hermes-parity-tests = { path = "crates/hermes-parity-tests" }
+hermes-bus = { path = "crates/hermes-bus" }
+hermes-runtime = { path = "crates/hermes-runtime" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

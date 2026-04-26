@@ -5,3 +5,5 @@ target/
 .github/
 .kiro/
 scripts/
+**/node_modules/
+ 

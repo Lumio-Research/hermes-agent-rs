@@ -608,7 +608,7 @@ pub async fn handle_cli_chat(
     }
     let agent_tool_registry = Arc::new(crate::app::bridge_tool_registry(&tool_registry));
 
-    let agent_config = crate::app::build_agent_config(&config, &current_model);
+    let agent_config = crate::app::build_agent_config(&config, &current_model, Some("cli"));
     let provider = crate::app::build_provider(&config, &current_model);
 
     let agent = hermes_agent::AgentLoop::new(agent_config, agent_tool_registry, provider);

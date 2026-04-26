@@ -6,6 +6,7 @@
 //! Policy HTTP routes are intentionally omitted (Hermes Python does not expose them).
 
 mod security;
+pub mod dashboard;
 
 pub use security::parse_allowed_ips;
 pub use security::PolicyGuardConfig;
@@ -126,6 +127,10 @@ impl PlatformAdapter for HttpPlatformAdapter {
 pub struct HttpServerState {
     pub config: Arc<GatewayConfig>,
     pub tool_registry: Arc<ToolRegistry>,
+    pub hermes_home: std::path::PathBuf,
+    pub session_persistence: Arc<hermes_agent::session_persistence::SessionPersistence>,
+    pub cron_scheduler: Option<Arc<hermes_cron::CronScheduler>>,
+    pub skill_store: Option<Arc<dyn hermes_skills::SkillStore>>,
     gateway: Arc<Gateway>,
     outbound: ChatOutboundBuffer,
 }
@@ -150,6 +155,16 @@ impl HttpServerState {
         gateway.register_adapter(HTTP_PLATFORM, adapter).await;
 
         let tool_registry = Arc::new(ToolRegistry::new());
+        // Register builtin tools (file, shell, browser, etc.)
+        let terminal_backend: Arc<dyn hermes_core::TerminalBackend> =
+            Arc::new(hermes_environments::LocalBackend::default());
+        let skill_store = Arc::new(hermes_skills::FileSkillStore::new(
+            hermes_skills::FileSkillStore::default_dir(),
+        ));
+        let skill_provider: Arc<dyn hermes_core::SkillProvider> =
+            Arc::new(hermes_skills::SkillManager::new(skill_store));
+        hermes_tools::register_builtin_tools(&tool_registry, terminal_backend, skill_provider);
+
         let agent_tools = Arc::new(bridge_tool_registry(&tool_registry));
         let config_arc = Arc::new(config.clone());
         let config_arc_stream = config_arc.clone();
@@ -280,9 +295,30 @@ impl HttpServerState {
             .await
             .map_err(|e| AgentError::Io(e.to_string()))?;
 
+        let hermes_home = hermes_config::hermes_home();
+        let session_persistence = Arc::new(
+            hermes_agent::session_persistence::SessionPersistence::new(&hermes_home),
+        );
+        let _ = session_persistence.ensure_db();
+
+        // Initialize cron scheduler backed by $HERMES_HOME/cron
+        let cron_dir = hermes_home.join("cron");
+        let cron_scheduler = Arc::new(
+            hermes_cron::cli_support::cron_scheduler_for_data_dir(cron_dir),
+        );
+
+        // Initialize skill store
+        let skill_store: Arc<dyn hermes_skills::SkillStore> = Arc::new(
+            hermes_skills::FileSkillStore::new(hermes_skills::FileSkillStore::default_dir()),
+        );
+
         Ok(Self {
             config: Arc::new(config),
             tool_registry,
+            hermes_home,
+            session_persistence,
+            cron_scheduler: Some(cron_scheduler),
+            skill_store: Some(skill_store),
             gateway,
             outbound,
         })
@@ -343,14 +379,54 @@ pub fn router(state: HttpServerState) -> Router {
     let rate_guard = rate.clone();
     let body_limit = max_request_body_bytes();
 
-    Router::new()
+    let mut app = Router::new()
         .route("/health", get(health))
         .route("/metrics", get(metrics_prometheus))
         .route("/v1/sessions/{session_id}/messages", post(send_message))
         .route("/v1/commands", post(exec_command))
         .route("/v1/ws/{session_id}", get(ws_upgrade))
-        .with_state(state)
-        .layer(middleware::from_fn(move |req, next| {
+        .route("/v1/ws-stream/{session_id}", get(ws_stream_upgrade))
+        // Dashboard management API
+        .merge(dashboard::router())
+        .with_state(state);
+
+    // Serve the web dashboard SPA from the `web/dist` directory if it exists.
+    // Checks HERMES_WEB_DIST env var first, then common relative paths.
+    let web_dist = std::env::var("HERMES_WEB_DIST")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            // Try relative to the binary location
+            let candidates = [
+                std::path::PathBuf::from("web/dist"),
+                std::path::PathBuf::from("../web/dist"),
+                std::path::PathBuf::from("../../web/dist"),
+            ];
+            candidates.into_iter().find(|p| p.join("index.html").exists())
+        });
+
+    if let Some(dist_dir) = web_dist {
+        if dist_dir.join("index.html").exists() {
+            tracing::info!("Serving web dashboard from {}", dist_dir.display());
+            // Serve static assets from dist/.  For SPA client-side routing, any path
+            // that doesn't match a real file should return index.html with 200.
+            let index_html = dist_dir.join("index.html");
+            let index_bytes: &'static [u8] = Box::leak(
+                std::fs::read(&index_html).unwrap_or_default().into_boxed_slice(),
+            );
+            app = app.fallback_service(
+                tower_http::services::ServeDir::new(&dist_dir)
+                    .fallback(get(move || async move {
+                        (
+                            [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                            index_bytes,
+                        )
+                    })),
+            );
+        }
+    }
+
+    app.layer(middleware::from_fn(move |req, next| {
             let sec = sec_guard.clone();
             let rl = rate_guard.clone();
             async move { security::request_guard(sec, rl, req, next).await }
@@ -590,6 +666,174 @@ async fn handle_ws(mut socket: WebSocket, state: HttpServerState, session_id: St
     }
 }
 
+// ---------------------------------------------------------------------------
+// Streaming WebSocket endpoint — real-time Agent events
+// ---------------------------------------------------------------------------
+
+/// WebSocket upgrade for streaming endpoint.
+async fn ws_stream_upgrade(
+    ws: WebSocketUpgrade,
+    Path(session_id): Path<String>,
+    State(state): State<HttpServerState>,
+) -> Response {
+    ws.on_upgrade(move |socket| handle_ws_stream(socket, state, session_id))
+}
+
+/// Streaming WebSocket handler.
+///
+/// Protocol:
+/// - Client sends: `{"text": "...", "user_id": "..."}` (same as SendMessageRequest)
+/// - Server pushes JSON events:
+///   `{"type": "text", "content": "token..."}`
+///   `{"type": "thinking", "content": "reasoning..."}`
+///   `{"type": "tool_start", "tool": "name", "content": "description"}`
+///   `{"type": "tool_complete", "tool": "name", "content": "result"}`
+///   `{"type": "status", "content": "message"}`
+///   `{"type": "activity", "content": "…"}` (at most once per silence for “still waiting”, then optionally once more if stalled)
+///   `{"type": "done", "content": "full_reply"}`
+///   `{"type": "error", "content": "error message"}`
+async fn handle_ws_stream(
+    mut socket: WebSocket,
+    state: HttpServerState,
+    session_id: String,
+) {
+    use hermes_agent::agent_loop::{AgentCallbacks, AgentLoop};
+    use tokio::sync::mpsc;
+
+    // Send connected event
+    let _ = socket
+        .send(WsMessage::Text(
+            serde_json::json!({"type": "connected", "session_id": session_id}).to_string().into(),
+        ))
+        .await;
+
+    while let Some(Ok(msg)) = socket.next().await {
+        match msg {
+            WsMessage::Text(text) => {
+                let parsed: Option<SendMessageRequest> =
+                    serde_json::from_str(&text).ok();
+                let request = parsed.unwrap_or_else(|| SendMessageRequest {
+                    text: text.to_string(),
+                    model: None,
+                    provider: None,
+                    personality: None,
+                    user_id: None,
+                });
+
+                let model = resolve_model(
+                    state.config.model.as_deref().unwrap_or("openai:gpt-4o-mini"),
+                    request.provider.as_deref(),
+                    request.model.as_deref(),
+                );
+
+                let config = build_agent_config(&state.config, &model);
+                let provider = build_provider(&state.config, &model);
+                let tool_registry = Arc::new(bridge_tool_registry(&state.tool_registry));
+
+                // Channel for streaming events from Agent callbacks → WebSocket
+                let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+
+                let _tx_text = tx.clone();
+                let tx_think = tx.clone();
+                let tx_tool_start = tx.clone();
+                let tx_tool_complete = tx.clone();
+                let tx_status = tx.clone();
+
+                let callbacks = AgentCallbacks {
+                    on_stream_delta: None, // Handled by run_stream's stream_cb
+                    on_thinking: Some(Box::new(move |text| {
+                        let _ = tx_think.send(
+                            serde_json::json!({"type": "thinking", "content": text}).to_string(),
+                        );
+                    })),
+                    on_tool_start: Some(Box::new(move |name, _params| {
+                        let _ = tx_tool_start.send(
+                            serde_json::json!({"type": "tool_start", "tool": name, "content": format!("执行: {}", name)}).to_string(),
+                        );
+                    })),
+                    on_tool_complete: Some(Box::new(move |name, result| {
+                        let preview = if result.len() > 500 { &result[..500] } else { result };
+                        let _ = tx_tool_complete.send(
+                            serde_json::json!({"type": "tool_complete", "tool": name, "content": preview}).to_string(),
+                        );
+                    })),
+                    on_step_complete: None,
+                    background_review_callback: None,
+                    status_callback: Some(Arc::new(move |cat, msg| {
+                        let (event_type, body): (&str, String) = if cat == "activity" {
+                            ("activity", msg.to_string())
+                        } else {
+                            ("status", format!("[{}] {}", cat, msg))
+                        };
+                        let _ = tx_status.send(
+                            serde_json::json!({"type": event_type, "content": body}).to_string(),
+                        );
+                    })),
+                };
+
+                let agent = AgentLoop::new(config, tool_registry, provider)
+                    .with_callbacks(callbacks);
+
+                let user_msg = Message::user(&request.text);
+
+                // Spawn agent execution in background with STREAMING
+                let tx_done = tx.clone();
+                let tx_stream = tx.clone();
+                let stream_cb: Box<dyn Fn(hermes_core::StreamChunk) + Send + Sync> =
+                    Box::new(move |chunk: hermes_core::StreamChunk| {
+                        if let Some(ref delta) = chunk.delta {
+                            if let Some(ref text) = delta.content {
+                                if !text.is_empty() {
+                                    let _ = tx_stream.send(
+                                        serde_json::json!({"type": "text", "content": text}).to_string(),
+                                    );
+                                }
+                            }
+                        }
+                    });
+
+                let agent_handle = tokio::spawn(async move {
+                    let result = agent.run_stream(vec![user_msg], None, Some(stream_cb)).await;
+                    match result {
+                        Ok(res) => {
+                            let reply = res
+                                .messages
+                                .iter()
+                                .rev()
+                                .find(|m| matches!(m.role, hermes_core::MessageRole::Assistant))
+                                .and_then(|m| m.content.clone())
+                                .unwrap_or_default();
+                            let _ = tx_done.send(
+                                serde_json::json!({"type": "done", "content": reply}).to_string(),
+                            );
+                        }
+                        Err(e) => {
+                            let _ = tx_done.send(
+                                serde_json::json!({"type": "error", "content": e.to_string()}).to_string(),
+                            );
+                        }
+                    }
+                    drop(tx_done);
+                });
+
+                // Forward channel events to WebSocket
+                while let Some(event_json) = rx.recv().await {
+                    if socket
+                        .send(WsMessage::Text(event_json.into()))
+                        .await
+                        .is_err()
+                    {
+                        agent_handle.abort();
+                        break;
+                    }
+                }
+            }
+            WsMessage::Close(_) => break,
+            _ => {}
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct HttpError {
     pub status: StatusCode,
@@ -719,7 +963,16 @@ pub fn build_provider(config: &GatewayConfig, model: &str) -> Arc<dyn LlmProvide
             }
             Arc::new(p)
         }
-        "openrouter" => Arc::new(OpenRouterProvider::new(&api_key).with_model(model_name)),
+        "openrouter" => {
+            let mut p = OpenRouterProvider::new(&api_key).with_model(model_name);
+            if let Some(cfg) = provider_config {
+                eprintln!("[build_provider] openrouter provider_order: {:?}", cfg.provider_order);
+                if !cfg.provider_order.is_empty() {
+                    p = p.with_provider_order(cfg.provider_order.clone());
+                }
+            }
+            Arc::new(p)
+        },
         "qwen" => Arc::new(QwenProvider::new(&api_key).with_model(model_name)),
         "kimi" | "moonshot" => Arc::new(KimiProvider::new(&api_key).with_model(model_name)),
         "minimax" => Arc::new(MiniMaxProvider::new(&api_key).with_model(model_name)),

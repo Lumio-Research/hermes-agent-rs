@@ -19,6 +19,7 @@ hermes-core = { workspace = true }
 hermes-agent = { workspace = true }
 hermes-tools = { workspace = true }
 hermes-config = { workspace = true }
+hermes-dashboard = { workspace = true }
 hermes-gateway = { workspace = true, features = [
     "telegram",
     "discord",
@@ -47,6 +48,7 @@ hermes-acp = { workspace = true }
 hermes-skills = { workspace = true }
 hermes-auth = { workspace = true }
 hermes-telemetry = { workspace = true }
+hermes-runtime = { workspace = true }
 clap = { workspace = true }
 clap_complete = "4"
 ratatui = { workspace = true }

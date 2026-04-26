@@ -1,10 +1,13 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use futures::stream::BoxStream;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::errors::{AgentError, GatewayError, ToolError};
 use crate::tool_schema::ToolSchema;
-use crate::types::{CommandOutput, LlmResponse, Skill, SkillMeta, StreamChunk};
+use crate::types::{CommandOutput, LlmResponse, Message, Skill, SkillMeta, StreamChunk};
 
 // ---------------------------------------------------------------------------
 // LlmProvider
@@ -186,4 +189,62 @@ pub trait SkillProvider: Send + Sync {
 
     /// Delete a skill by name.
     async fn delete_skill(&self, name: &str) -> Result<(), AgentError>;
+}
+
+// ---------------------------------------------------------------------------
+// AgentOverrides / AgentReply
+// ---------------------------------------------------------------------------
+
+/// Optional overrides for a single agent request.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentOverrides {
+    pub model: Option<String>,
+    pub personality: Option<String>,
+}
+
+/// Reply from an agent execution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentReply {
+    /// The assistant's text response.
+    pub text: String,
+    /// Total message count in the session after this exchange.
+    pub message_count: usize,
+}
+
+// ---------------------------------------------------------------------------
+// AgentService
+// ---------------------------------------------------------------------------
+
+/// Abstraction for agent execution — callers are agnostic about
+/// whether the agent runs in-process or remotely.
+#[async_trait]
+pub trait AgentService: Send + Sync {
+    /// Send a message to a session and get the reply.
+    async fn send_message(
+        &self,
+        session_id: &str,
+        text: &str,
+        overrides: AgentOverrides,
+    ) -> Result<AgentReply, AgentError>;
+
+    /// Send a message and stream back chunks followed by a final reply.
+    async fn send_message_stream(
+        &self,
+        session_id: &str,
+        text: &str,
+        overrides: AgentOverrides,
+        on_chunk: Arc<dyn Fn(StreamChunk) + Send + Sync>,
+    ) -> Result<AgentReply, AgentError>;
+
+    /// Get all messages for a session.
+    async fn get_session_messages(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<Message>, AgentError>;
+
+    /// Clear a session's message history.
+    async fn reset_session(
+        &self,
+        session_id: &str,
+    ) -> Result<(), AgentError>;
 }

@@ -93,7 +93,7 @@ hermes-cli                    # Binary entry point, TUI, slash commands
 ├── hermes-acp                # Agent Communication Protocol
 ├── hermes-skills             # Skill management and hub
 ├── hermes-cron               # Cron scheduling
-├── hermes-http               # REST/WebSocket API server
+├── hermes-dashboard          # Web dashboard + HTTP/WebSocket API server
 ├── hermes-auth               # OAuth token exchange
 ├── hermes-eval               # SWE-bench, Terminal-Bench, YC Bench
 └── hermes-telemetry          # OpenTelemetry + Prometheus

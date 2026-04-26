@@ -1281,6 +1281,8 @@ pub struct OpenRouterProvider {
     pub http_referer: Option<String>,
     /// X-Title header value (required by OpenRouter).
     pub x_title: Option<String>,
+    /// Preferred provider order (e.g. ["DeepInfra", "Together"]).
+    pub provider_order: Option<Vec<String>>,
 }
 
 impl OpenRouterProvider {
@@ -1290,6 +1292,7 @@ impl OpenRouterProvider {
             inner: GenericProvider::new("https://openrouter.ai/api/v1", api_key, "openai/gpt-4o"),
             http_referer: None,
             x_title: None,
+            provider_order: None,
         }
     }
 
@@ -1318,6 +1321,13 @@ impl OpenRouterProvider {
     /// Set the X-Title header (required by OpenRouter).
     pub fn with_x_title(mut self, title: impl Into<String>) -> Self {
         self.x_title = Some(title.into());
+        self
+    }
+
+    /// Set preferred provider order for OpenRouter routing.
+    /// e.g. `vec!["DeepInfra", "Together"]`
+    pub fn with_provider_order(mut self, order: Vec<String>) -> Self {
+        self.provider_order = Some(order);
         self
     }
 
@@ -1410,6 +1420,15 @@ impl LlmProvider for OpenRouterProvider {
             }
         }
 
+        // Inject OpenRouter provider preferences
+        if let Some(ref order) = self.provider_order {
+            if !order.is_empty() {
+                body["provider"] = serde_json::json!({
+                    "order": order,
+                });
+            }
+        }
+
         let url = format!(
             "{}/chat/completions",
             provider.base_url.trim_end_matches('/')
@@ -1454,13 +1473,26 @@ impl LlmProvider for OpenRouterProvider {
         provider.extra_headers = self.build_headers();
         let merged_extra = Self::merge_extra_body(extra_body);
 
+        // Inject provider order into extra_body for streaming
+        let final_extra = if let Some(ref order) = self.provider_order {
+            if !order.is_empty() {
+                let mut eb = merged_extra.unwrap_or_else(|| serde_json::json!({}));
+                eb["provider"] = serde_json::json!({"order": order});
+                Some(eb)
+            } else {
+                merged_extra
+            }
+        } else {
+            merged_extra
+        };
+
         provider.chat_completion_stream(
             messages,
             tools,
             max_tokens,
             temperature,
             model,
-            merged_extra.as_ref(),
+            final_extra.as_ref(),
         )
     }
 }

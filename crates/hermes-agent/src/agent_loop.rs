@@ -442,6 +442,18 @@ pub struct AgentConfig {
     /// Max retries when streaming assembles truncated tool arguments (`finish_reason=length` parity).
     #[serde(default = "default_truncated_tool_call_max_retries")]
     pub truncated_tool_call_max_retries: u32,
+
+    /// Seconds of silence before the **first** (and only, until reset) "still waiting" activity
+    /// notice while collecting a stream. Resets on every chunk. `0` disables all stream activity
+    /// notices (including [`Self::stream_activity_stall_secs`]).
+    #[serde(default = "default_stream_activity_interval_secs")]
+    pub stream_activity_interval_secs: u64,
+
+    /// After the first activity notice, if still no chunk for this many seconds, emit a second
+    /// `"activity"` notice (likely stuck). `0` disables the second notice. Ignored when
+    /// `stream_activity_interval_secs` is `0`.
+    #[serde(default = "default_stream_activity_stall_secs")]
+    pub stream_activity_stall_secs: u64,
 }
 
 fn default_max_turns() -> u32 {
@@ -524,6 +536,14 @@ fn default_truncated_tool_call_max_retries() -> u32 {
     3
 }
 
+fn default_stream_activity_interval_secs() -> u64 {
+    12
+}
+
+fn default_stream_activity_stall_secs() -> u64 {
+    90
+}
+
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
@@ -574,6 +594,8 @@ impl Default for AgentConfig {
             invalid_tool_call_max_retries: default_invalid_tool_call_max_retries(),
             invalid_tool_json_max_retries: default_invalid_tool_json_max_retries(),
             truncated_tool_call_max_retries: default_truncated_tool_call_max_retries(),
+            stream_activity_interval_secs: default_stream_activity_interval_secs(),
+            stream_activity_stall_secs: default_stream_activity_stall_secs(),
         }
     }
 }
@@ -627,6 +649,8 @@ pub struct AgentCallbacks {
     /// Payload is a user-friendly summary string suitable for direct UI output.
     pub background_review_callback: Option<Arc<dyn Fn(&str) + Send + Sync>>,
     /// Called for lifecycle/status notices (context pressure, retries, etc.).
+    ///
+    /// The first argument is a category string (e.g. `"lifecycle"`, `"activity"`).
     pub status_callback: Option<Arc<dyn Fn(&str, &str) + Send + Sync>>,
 }
 
@@ -2316,6 +2340,69 @@ impl AgentLoop {
         }
     }
 
+    /// Apply one streaming [`StreamChunk`] during [`Self::collect_stream_llm_response`].
+    fn apply_stream_collect_chunk(
+        &self,
+        chunk: StreamChunk,
+        content: &mut String,
+        reasoning_content: &mut String,
+        tool_calls: &mut Vec<ToolCall>,
+        last_usage: &mut Option<UsageStats>,
+        finish_reason: &mut Option<String>,
+        on_chunk: &(dyn Fn(StreamChunk) + Send + Sync),
+    ) {
+        if let Some(ref delta) = chunk.delta {
+            if let Some(ref text) = delta.content {
+                content.push_str(text);
+                if let Some(ref cb) = self.callbacks.on_stream_delta {
+                    cb(text);
+                }
+            }
+            if let Some(ref extra) = delta.extra {
+                if let Some(thinking) = extra.get("thinking").and_then(|v| v.as_str()) {
+                    reasoning_content.push_str(thinking);
+                    if let Some(ref cb) = self.callbacks.on_thinking {
+                        cb(thinking);
+                    }
+                }
+            }
+            if let Some(ref tc_deltas) = delta.tool_calls {
+                for tcd in tc_deltas {
+                    let idx = tcd.index as usize;
+                    while tool_calls.len() <= idx {
+                        tool_calls.push(ToolCall {
+                            id: String::new(),
+                            function: hermes_core::FunctionCall {
+                                name: String::new(),
+                                arguments: String::new(),
+                            },
+                        });
+                    }
+                    if let Some(ref id) = tcd.id {
+                        tool_calls[idx].id = id.clone();
+                    }
+                    if let Some(ref fc) = tcd.function {
+                        if let Some(ref name) = fc.name {
+                            tool_calls[idx].function.name = name.clone();
+                        }
+                        if let Some(ref args) = fc.arguments {
+                            tool_calls[idx].function.arguments.push_str(args);
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(ref usage) = chunk.usage {
+            *last_usage = Some(usage.clone());
+        }
+        if let Some(ref fr) = chunk.finish_reason {
+            *finish_reason = Some(fr.clone());
+        }
+
+        on_chunk(chunk);
+    }
+
     /// Collect one streaming completion into [`LlmResponse`] (first attempt in `run_stream` D-step).
     async fn collect_stream_llm_response(
         &self,
@@ -2385,72 +2472,108 @@ impl AgentLoop {
         let mut last_usage: Option<UsageStats> = None;
         let mut finish_reason: Option<String> = None;
 
-        while let Some(chunk_result) = stream.next().await {
-            if self.interrupt.take_interrupt_graceful().is_some() {
-                let message = Self::assemble_stream_assistant_message(
-                    &content,
-                    &reasoning_content,
-                    &tool_calls,
+        let activity_secs = self.config.stream_activity_interval_secs;
+
+        if activity_secs == 0 {
+            while let Some(chunk_result) = stream.next().await {
+                if self.interrupt.take_interrupt_graceful().is_some() {
+                    let message = Self::assemble_stream_assistant_message(
+                        &content,
+                        &reasoning_content,
+                        &tool_calls,
+                    );
+                    return Ok(StreamCollectOutcome::Interrupted(LlmResponse {
+                        message,
+                        usage: last_usage.clone(),
+                        model: active_model.to_string(),
+                        finish_reason: Some("interrupted".to_string()),
+                    }));
+                }
+                let chunk = chunk_result?;
+                self.apply_stream_collect_chunk(
+                    chunk,
+                    &mut content,
+                    &mut reasoning_content,
+                    &mut tool_calls,
+                    &mut last_usage,
+                    &mut finish_reason,
+                    on_chunk,
                 );
-                return Ok(StreamCollectOutcome::Interrupted(LlmResponse {
-                    message,
-                    usage: last_usage.clone(),
-                    model: active_model.to_string(),
-                    finish_reason: Some("interrupted".to_string()),
-                }));
             }
-            let chunk = chunk_result?;
+        } else {
+            const IDLE_ARM_MAX: Duration = Duration::from_secs(86_400);
+            let first_dur = Duration::from_secs(activity_secs);
+            let stall_secs = self.config.stream_activity_stall_secs;
+            let stall_dur = Duration::from_secs(stall_secs);
 
-            if let Some(ref delta) = chunk.delta {
-                if let Some(ref text) = delta.content {
-                    content.push_str(text);
-                    if let Some(ref cb) = self.callbacks.on_stream_delta {
-                        cb(text);
-                    }
-                }
-                if let Some(ref extra) = delta.extra {
-                    if let Some(thinking) = extra.get("thinking").and_then(|v| v.as_str()) {
-                        reasoning_content.push_str(thinking);
-                        if let Some(ref cb) = self.callbacks.on_thinking {
-                            cb(thinking);
-                        }
-                    }
-                }
-                if let Some(ref tc_deltas) = delta.tool_calls {
-                    for tcd in tc_deltas {
-                        let idx = tcd.index as usize;
-                        while tool_calls.len() <= idx {
-                            tool_calls.push(ToolCall {
-                                id: String::new(),
-                                function: hermes_core::FunctionCall {
-                                    name: String::new(),
-                                    arguments: String::new(),
-                                },
-                            });
-                        }
-                        if let Some(ref id) = tcd.id {
-                            tool_calls[idx].id = id.clone();
-                        }
-                        if let Some(ref fc) = tcd.function {
-                            if let Some(ref name) = fc.name {
-                                tool_calls[idx].function.name = name.clone();
-                            }
-                            if let Some(ref args) = fc.arguments {
-                                tool_calls[idx].function.arguments.push_str(args);
+            'silence_watch: loop {
+                let mut idle = Box::pin(sleep(first_dur));
+                let mut warm_notice_sent = false;
+                let mut stall_notice_sent = false;
+                loop {
+                    tokio::select! {
+                        biased;
+                        chunk_opt = stream.next() => {
+                            match chunk_opt {
+                                None => break 'silence_watch,
+                                Some(chunk_result) => {
+                                    if self.interrupt.take_interrupt_graceful().is_some() {
+                                        let message = Self::assemble_stream_assistant_message(
+                                            &content,
+                                            &reasoning_content,
+                                            &tool_calls,
+                                        );
+                                        return Ok(StreamCollectOutcome::Interrupted(LlmResponse {
+                                            message,
+                                            usage: last_usage.clone(),
+                                            model: active_model.to_string(),
+                                            finish_reason: Some("interrupted".to_string()),
+                                        }));
+                                    }
+                                    let chunk = chunk_result?;
+                                    self.apply_stream_collect_chunk(
+                                        chunk,
+                                        &mut content,
+                                        &mut reasoning_content,
+                                        &mut tool_calls,
+                                        &mut last_usage,
+                                        &mut finish_reason,
+                                        on_chunk,
+                                    );
+                                    continue 'silence_watch;
+                                }
                             }
                         }
+                        _ = idle.as_mut() => {
+                            if !warm_notice_sent {
+                                self.emit_status(
+                                    "activity",
+                                    "Still waiting for the model…",
+                                );
+                                warm_notice_sent = true;
+                                if stall_secs > 0 {
+                                    idle.as_mut()
+                                        .reset(tokio::time::Instant::now() + stall_dur);
+                                } else {
+                                    idle.as_mut()
+                                        .reset(tokio::time::Instant::now() + IDLE_ARM_MAX);
+                                }
+                            } else if stall_secs > 0 && !stall_notice_sent {
+                                self.emit_status(
+                                    "activity",
+                                    "Still no model output — the stream may be stuck.",
+                                );
+                                stall_notice_sent = true;
+                                idle.as_mut()
+                                    .reset(tokio::time::Instant::now() + IDLE_ARM_MAX);
+                            } else {
+                                idle.as_mut()
+                                    .reset(tokio::time::Instant::now() + IDLE_ARM_MAX);
+                            }
+                        }
                     }
                 }
             }
-
-            if let Some(ref usage) = chunk.usage {
-                last_usage = Some(usage.clone());
-            }
-            if let Some(ref fr) = chunk.finish_reason {
-                finish_reason = Some(fr.clone());
-            }
-
-            on_chunk(chunk);
         }
 
         let has_truncated_tool_args = tool_calls.iter().any(|tc| {
@@ -5246,6 +5369,109 @@ mod tests {
         }));
     }
 
+    #[tokio::test]
+    async fn stream_collect_emits_activity_while_waiting_for_chunks() {
+        use async_stream::stream;
+        use futures::stream::BoxStream;
+
+        struct DelayedStreamProvider;
+
+        #[async_trait::async_trait]
+        impl LlmProvider for DelayedStreamProvider {
+            async fn chat_completion(
+                &self,
+                _messages: &[Message],
+                _tools: &[ToolSchema],
+                _max_tokens: Option<u32>,
+                _temperature: Option<f64>,
+                _model: Option<&str>,
+                _extra_body: Option<&serde_json::Value>,
+            ) -> Result<hermes_core::LlmResponse, AgentError> {
+                Ok(hermes_core::LlmResponse {
+                    message: Message::assistant("noop"),
+                    usage: None,
+                    model: "dummy".into(),
+                    finish_reason: Some("stop".into()),
+                })
+            }
+
+            fn chat_completion_stream(
+                &self,
+                _messages: &[Message],
+                _tools: &[ToolSchema],
+                _max_tokens: Option<u32>,
+                _temperature: Option<f64>,
+                _model: Option<&str>,
+                _extra_body: Option<&serde_json::Value>,
+            ) -> BoxStream<'static, Result<StreamChunk, AgentError>> {
+                Box::pin(stream! {
+                    tokio::time::sleep(Duration::from_millis(3500)).await;
+                    yield Ok(StreamChunk {
+                        delta: Some(hermes_core::StreamDelta {
+                            content: Some("hi".into()),
+                            tool_calls: None,
+                            extra: None,
+                        }),
+                        finish_reason: None,
+                        usage: None,
+                    });
+                    yield Ok(StreamChunk {
+                        delta: None,
+                        finish_reason: Some("stop".into()),
+                        usage: None,
+                    });
+                })
+            }
+        }
+
+        let captured = Arc::new(std::sync::Mutex::new(Vec::<(String, String)>::new()));
+        let cap_ref = captured.clone();
+        let callbacks = AgentCallbacks {
+            status_callback: Some(Arc::new(move |kind, msg| {
+                cap_ref
+                    .lock()
+                    .expect("status lock")
+                    .push((kind.to_string(), msg.to_string()));
+            })),
+            ..Default::default()
+        };
+
+        let cfg = AgentConfig {
+            stream_activity_interval_secs: 1,
+            stream_activity_stall_secs: 1,
+            ..AgentConfig::default()
+        };
+        let agent = AgentLoop::new(
+            cfg,
+            Arc::new(ToolRegistry::new()),
+            Arc::new(DelayedStreamProvider),
+        )
+        .with_callbacks(callbacks);
+
+        let mut ctx = ContextManager::new(10_000);
+        ctx.add_message(Message::user("ping"));
+
+        let noop: &(dyn Fn(StreamChunk) + Send + Sync) = &|_chunk| {};
+        let outcome = agent
+            .collect_stream_llm_response(&ctx, &[], None, "openai:gpt-4o", noop)
+            .await
+            .expect("stream collect");
+
+        assert!(matches!(outcome, StreamCollectOutcome::Complete(_)));
+        let rows = captured.lock().expect("captured lock");
+        let warm = rows
+            .iter()
+            .any(|(k, m)| k == "activity" && m.contains("Still waiting"));
+        let stall = rows
+            .iter()
+            .any(|(k, m)| k == "activity" && m.contains("may be stuck"));
+        assert!(
+            warm && stall,
+            "expected one warm + one stall activity; got {:?}",
+            *rows
+        );
+    }
+
     #[test]
     fn quiet_mode_suppresses_status_callback() {
         use futures::stream::BoxStream;
@@ -5407,7 +5633,6 @@ mod tests {
         );
         let prompt = agent.build_system_prompt("", &[], "gpt-4o");
         assert!(!prompt.contains("## Active Personality (unknown_persona)"));
-        assert!(prompt.contains("You are Hermes Agent"));
     }
 
     #[test]

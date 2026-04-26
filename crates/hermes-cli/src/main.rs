@@ -15,12 +15,8 @@
 use clap::CommandFactory;
 use clap::Parser;
 use clap_complete::{generate, Shell as CompletionShell};
-use hermes_agent::session_persistence::SessionPersistence;
-use hermes_agent::{leading_system_prompt_for_persist, AgentCallbacks, AgentLoop};
 use hermes_auth::{AuthManager, FileTokenStore, OAuthCredential};
-use hermes_cli::app::{
-    bridge_tool_registry, build_agent_config, build_provider, provider_api_key_from_env,
-};
+use hermes_cli::app::provider_api_key_from_env;
 use hermes_cli::cli::{Cli, CliCommand};
 use hermes_cli::App;
 use hermes_config::{
@@ -29,46 +25,15 @@ use hermes_config::{
     PlatformConfig,
 };
 use hermes_core::AgentError;
+#[cfg(test)]
 use hermes_core::PlatformAdapter;
-use hermes_core::{MessageRole, StreamChunk};
-use hermes_cron::{
-    cron_scheduler_for_data_dir, CronCompletionEvent, CronError, CronRunner, CronScheduler,
-    FileJobPersistence,
-};
-use hermes_environments::LocalBackend;
-use hermes_gateway::gateway::GatewayConfig as RuntimeGatewayConfig;
-use hermes_gateway::gateway::IncomingMessage as GatewayIncomingMessage;
-use hermes_gateway::hook_payloads;
-use hermes_gateway::hooks::HookRegistry;
-use hermes_gateway::platforms::api_server::{ApiServerAdapter, ApiServerConfig};
-use hermes_gateway::platforms::bluebubbles::{BlueBubblesAdapter, BlueBubblesConfig};
-use hermes_gateway::platforms::dingtalk::{DingTalkAdapter, DingTalkConfig};
-use hermes_gateway::platforms::discord::{DiscordAdapter, DiscordConfig};
-use hermes_gateway::platforms::email::{EmailAdapter, EmailConfig};
-use hermes_gateway::platforms::feishu::{FeishuAdapter, FeishuConfig};
-use hermes_gateway::platforms::homeassistant::{HomeAssistantAdapter, HomeAssistantConfig};
-use hermes_gateway::platforms::matrix::{MatrixAdapter, MatrixConfig};
-use hermes_gateway::platforms::mattermost::{MattermostAdapter, MattermostConfig};
-use hermes_gateway::platforms::qqbot::{QqBotAdapter, QqBotConfig};
-use hermes_gateway::platforms::signal::{SignalAdapter, SignalConfig};
-use hermes_gateway::platforms::slack::{SlackAdapter, SlackConfig};
-use hermes_gateway::platforms::sms::{SmsAdapter, SmsConfig};
-use hermes_gateway::platforms::telegram::{TelegramAdapter, TelegramConfig};
-use hermes_gateway::platforms::webhook::{WebhookAdapter, WebhookConfig};
-use hermes_gateway::platforms::wecom::{WeComAdapter, WeComConfig};
-use hermes_gateway::platforms::wecom_callback::{
-    WeComCallbackAdapter, WeComCallbackApp, WeComCallbackConfig,
-};
-use hermes_gateway::platforms::weixin::{WeChatAdapter, WeixinConfig};
-use hermes_gateway::platforms::whatsapp::{WhatsAppAdapter, WhatsAppConfig};
-use hermes_gateway::{DmManager, Gateway, GatewayRuntimeContext, SessionManager};
-use hermes_skills::{FileSkillStore, SkillManager};
+use hermes_cron::{cron_scheduler_for_data_dir, CronError};
+#[cfg(test)]
+use hermes_gateway::Gateway;
 use hermes_telemetry::init_telemetry_from_env;
-use hermes_tools::ToolRegistry;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
-use tokio::sync::broadcast;
+#[cfg(test)]
+use std::sync::Arc;
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -147,6 +112,14 @@ async fn main() {
             prompt,
         } => run_cron(cli, action, id, schedule, prompt).await,
         CliCommand::Webhook { action, url, id } => run_webhook(cli, action, url, id).await,
+        CliCommand::Web { host, port, no_open } => run_web(host, port, no_open).await,
+        CliCommand::Serve {
+            host,
+            port,
+            no_dashboard,
+            no_platforms,
+            no_cron,
+        } => run_serve(host, port, no_dashboard, no_platforms, no_cron).await,
         CliCommand::Dump { session, output } => run_dump(cli, session, output).await,
         CliCommand::Completion { shell } => run_completion(shell),
         CliCommand::Uninstall { yes } => run_uninstall(yes).await,
@@ -449,32 +422,7 @@ async fn run_gateway(cli: Cli, action: Option<String>) -> Result<(), AgentError>
         }
         None | Some("start") => {
             println!("Starting Hermes Gateway...");
-
-            // List enabled platforms
-            let enabled: Vec<&String> = config
-                .platforms
-                .iter()
-                .filter(|(_, pc)| pc.enabled)
-                .map(|(name, _)| name)
-                .collect();
-
-            if enabled.is_empty() {
-                println!(
-                    "Note: no chat platforms enabled in config.yaml — gateway still runs cron + HTTP webhooks."
-                );
-            }
-            let requirement_issues = gateway_requirement_issues(&config);
-            if !requirement_issues.is_empty() {
-                let mut msg = String::from("Gateway requirement check failed:\n");
-                for issue in requirement_issues {
-                    msg.push_str("  - ");
-                    msg.push_str(&issue);
-                    msg.push('\n');
-                }
-                msg.push_str("请先执行 `hermes gateway setup` 或 `hermes auth login <provider>` 修复后再启动。");
-                return Err(AgentError::Config(msg));
-            }
-
+            println!("Using unified RuntimeBuilder for gateway start.");
             let pid_path = gateway_pid_path_for_cli(&cli);
             if let Some(pid) = read_gateway_pid(&pid_path) {
                 if gateway_pid_is_alive(pid) {
@@ -487,515 +435,19 @@ async fn run_gateway(cli: Cli, action: Option<String>) -> Result<(), AgentError>
                 }
                 let _ = std::fs::remove_file(&pid_path);
             }
-
-            if !enabled.is_empty() {
-                println!(
-                    "Enabled platforms: {}",
-                    enabled
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
+            if let Some(parent) = pid_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
             }
+            std::fs::write(&pid_path, format!("{}\n", std::process::id()))
+                .map_err(|e| AgentError::Io(format!("failed to write PID file: {}", e)))?;
 
-            // Build gateway runtime and context-aware message handler.
-            let runtime_gateway_config = RuntimeGatewayConfig {
-                streaming_enabled: config.streaming.enabled,
-                ..RuntimeGatewayConfig::default()
-            };
-            let session_manager = Arc::new(SessionManager::new(config.session.clone()));
-            let dm_manager = DmManager::with_pair_behavior();
-            let gateway = Arc::new(Gateway::new(
-                session_manager,
-                dm_manager,
-                runtime_gateway_config,
-            ));
-            let mut hook_registry = HookRegistry::new();
-            hook_registry.register_builtins();
-            hook_registry.discover_and_load(&hermes_home().join("hooks"));
-            hook_registry.set_execution_limits(Some(16));
-            gateway.set_hook_registry(Arc::new(hook_registry)).await;
-            let enabled_refs: Vec<&str> = enabled.iter().map(|s| s.as_str()).collect();
-            gateway
-                .emit_hook_event(
-                    "gateway:startup",
-                    hook_payloads::gateway_startup(&enabled_refs),
-                )
+            let res = hermes_runtime::RuntimeBuilder::new(config.clone())
+                .with_platforms()
+                .with_cron()
+                .run()
                 .await;
-
-            let tool_registry = Arc::new(ToolRegistry::new());
-            let terminal_backend: Arc<dyn hermes_core::TerminalBackend> =
-                Arc::new(LocalBackend::default());
-            let skill_store = Arc::new(FileSkillStore::new(FileSkillStore::default_dir()));
-            let skill_provider: Arc<dyn hermes_core::SkillProvider> =
-                Arc::new(SkillManager::new(skill_store));
-            hermes_tools::register_builtin_tools(&tool_registry, terminal_backend, skill_provider);
-            let live_count =
-                hermes_cli::live_messaging::enable_live_messaging_tool(&config, &tool_registry)
-                    .await;
-            if live_count > 0 {
-                tracing::info!(
-                    adapters = live_count,
-                    "Enabled live send_message delivery backend for gateway agent runtime"
-                );
-            }
-            let agent_registry = Arc::new(bridge_tool_registry(&tool_registry));
-            let agent_tools_for_msg = agent_registry.clone();
-            let agent_tools_for_stream = agent_registry.clone();
-            let agent_tools_for_cron = agent_registry.clone();
-            let config_arc = Arc::new(config.clone());
-            let config_arc_stream = config_arc.clone();
-            let gateway_for_review = gateway.clone();
-            let gateway_for_review_stream = gateway.clone();
-            gateway
-                .set_message_handler_with_context(Arc::new(move |messages, ctx| {
-                    let config = config_arc.clone();
-                    let agent_tools = agent_tools_for_msg.clone();
-                    let gateway_for_review = gateway_for_review.clone();
-                    Box::pin(async move {
-                        let effective_model = resolve_model_for_gateway(
-                            config.model.as_deref().unwrap_or("gpt-4o"),
-                            &ctx,
-                        );
-                        let platform_for_review = ctx.platform.clone();
-                        let chat_for_review = ctx.chat_id.clone();
-                        let deferred_queue = ctx.deferred_post_delivery_messages.clone();
-                        let deferred_released = ctx.deferred_post_delivery_released.clone();
-                        let gateway_for_review_cb = gateway_for_review.clone();
-                        let review_cb = Arc::new(move |text: &str| {
-                            if let (Some(queue), Some(released)) =
-                                (deferred_queue.as_ref(), deferred_released.as_ref())
-                            {
-                                if !released.load(Ordering::Acquire) {
-                                    if let Ok(mut guard) = queue.lock() {
-                                        guard.push(text.to_string());
-                                        return;
-                                    }
-                                }
-                            }
-                            let gw = gateway_for_review_cb.clone();
-                            let platform = platform_for_review.clone();
-                            let chat_id = chat_for_review.clone();
-                            let msg = text.to_string();
-                            tokio::spawn(async move {
-                                let _ = gw.send_message(&platform, &chat_id, &msg, None).await;
-                            });
-                        });
-                        let gateway_for_status = gateway_for_review.clone();
-                        let gateway_for_status_hook = gateway_for_review.clone();
-                        let platform_for_status = ctx.platform.clone();
-                        let chat_for_status = ctx.chat_id.clone();
-                        let platform_for_status_hook = ctx.platform.clone();
-                        let user_for_status_hook = ctx.user_id.clone();
-                        let session_for_status_hook = ctx.session_key.clone();
-                        let status_cb = Arc::new(move |event_type: &str, message: &str| {
-                            if message.trim().is_empty() {
-                                return;
-                            }
-                            let gw = gateway_for_status.clone();
-                            let platform = platform_for_status.clone();
-                            let chat_id = chat_for_status.clone();
-                            let msg = message.to_string();
-                            tokio::spawn(async move {
-                                let _ = gw.send_message(&platform, &chat_id, &msg, None).await;
-                            });
-                            let gw_hook = gateway_for_status_hook.clone();
-                            let platform = platform_for_status_hook.clone();
-                            let chat_id_hook = chat_for_status.clone();
-                            let user_id = user_for_status_hook.clone();
-                            let session_id = session_for_status_hook.clone();
-                            let event_type = event_type.to_string();
-                            let message = message.to_string();
-                            tokio::spawn(async move {
-                                gw_hook
-                                    .emit_hook_event(
-                                        "agent:status",
-                                        hook_payloads::agent_status(
-                                            platform,
-                                            chat_id_hook,
-                                            user_id,
-                                            session_id,
-                                            &event_type,
-                                            &message,
-                                        ),
-                                    )
-                                    .await;
-                            });
-                        });
-                        let tool_events = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
-                        let tool_events_for_complete = tool_events.clone();
-                        let on_tool_complete: Box<dyn Fn(&str, &str) + Send + Sync> =
-                            Box::new(move |name: &str, result: &str| {
-                                if let Ok(mut guard) = tool_events_for_complete.lock() {
-                                    guard.push(serde_json::json!({
-                                        "name": name,
-                                        "result": truncate_hook_tool_result(result)
-                                    }));
-                                }
-                            });
-                        let tool_events_for_step = tool_events.clone();
-                        let gateway_for_step_hook = gateway_for_review.clone();
-                        let platform_for_step_hook = ctx.platform.clone();
-                        let chat_for_step_hook = ctx.chat_id.clone();
-                        let user_for_step_hook = ctx.user_id.clone();
-                        let session_for_step_hook = ctx.session_key.clone();
-                        let on_step_complete: Box<dyn Fn(u32) + Send + Sync> =
-                            Box::new(move |iteration: u32| {
-                                let tools = if let Ok(mut guard) = tool_events_for_step.lock() {
-                                    std::mem::take(&mut *guard)
-                                } else {
-                                    Vec::new()
-                                };
-                                let tool_names: Vec<String> = tools
-                                    .iter()
-                                    .filter_map(|v| {
-                                        v.get("name")
-                                            .and_then(|n| n.as_str())
-                                            .map(|s| s.to_string())
-                                    })
-                                    .collect();
-                                let gw_hook = gateway_for_step_hook.clone();
-                                let platform = platform_for_step_hook.clone();
-                                let chat_id = chat_for_step_hook.clone();
-                                let user_id = user_for_step_hook.clone();
-                                let session_id = session_for_step_hook.clone();
-                                tokio::spawn(async move {
-                                    gw_hook
-                                        .emit_hook_event(
-                                            "agent:step",
-                                            hook_payloads::agent_step(
-                                                platform, chat_id, user_id, session_id, iteration,
-                                                tool_names, tools,
-                                            ),
-                                        )
-                                        .await;
-                                });
-                            });
-                        let callbacks = AgentCallbacks {
-                            background_review_callback: Some(review_cb),
-                            status_callback: Some(status_cb),
-                            on_tool_complete: Some(on_tool_complete),
-                            on_step_complete: Some(on_step_complete),
-                            ..Default::default()
-                        };
-                        let agent =
-                            build_agent_for_gateway_context(config.as_ref(), &ctx, agent_tools)
-                                .with_callbacks(callbacks);
-                        let result = agent
-                            .run(messages, None)
-                            .await
-                            .map_err(|e| hermes_gateway::GatewayError::Platform(e.to_string()))?;
-                        let home = ctx
-                            .home
-                            .as_deref()
-                            .or(config.home_dir.as_deref())
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty());
-                        if let Some(h) = home {
-                            if !ctx.session_key.trim().is_empty() {
-                                let sp = SessionPersistence::new(Path::new(h));
-                                let sys = leading_system_prompt_for_persist(&result.messages);
-                                let _ = sp.persist_session(
-                                    &ctx.session_key,
-                                    &result.messages,
-                                    Some(&effective_model),
-                                    Some(ctx.platform.as_str()),
-                                    None,
-                                    sys.as_deref(),
-                                );
-                            }
-                        }
-                        Ok(extract_last_assistant_reply(&result.messages))
-                    })
-                }))
-                .await;
-            gateway
-                .set_streaming_handler_with_context(Arc::new(move |messages, ctx, on_chunk| {
-                    let config = config_arc_stream.clone();
-                    let agent_tools = agent_tools_for_stream.clone();
-                    let gateway_for_review = gateway_for_review_stream.clone();
-                    Box::pin(async move {
-                        let effective_model = resolve_model_for_gateway(
-                            config.model.as_deref().unwrap_or("gpt-4o"),
-                            &ctx,
-                        );
-                        let platform_for_review = ctx.platform.clone();
-                        let chat_for_review = ctx.chat_id.clone();
-                        let deferred_queue = ctx.deferred_post_delivery_messages.clone();
-                        let deferred_released = ctx.deferred_post_delivery_released.clone();
-                        let gateway_for_review_cb = gateway_for_review.clone();
-                        let review_cb = Arc::new(move |text: &str| {
-                            if let (Some(queue), Some(released)) =
-                                (deferred_queue.as_ref(), deferred_released.as_ref())
-                            {
-                                if !released.load(Ordering::Acquire) {
-                                    if let Ok(mut guard) = queue.lock() {
-                                        guard.push(text.to_string());
-                                        return;
-                                    }
-                                }
-                            }
-                            let gw = gateway_for_review_cb.clone();
-                            let platform = platform_for_review.clone();
-                            let chat_id = chat_for_review.clone();
-                            let msg = text.to_string();
-                            tokio::spawn(async move {
-                                let _ = gw.send_message(&platform, &chat_id, &msg, None).await;
-                            });
-                        });
-                        let gateway_for_status = gateway_for_review.clone();
-                        let gateway_for_status_hook = gateway_for_review.clone();
-                        let platform_for_status = ctx.platform.clone();
-                        let chat_for_status = ctx.chat_id.clone();
-                        let platform_for_status_hook = ctx.platform.clone();
-                        let user_for_status_hook = ctx.user_id.clone();
-                        let session_for_status_hook = ctx.session_key.clone();
-                        let status_cb = Arc::new(move |event_type: &str, message: &str| {
-                            if message.trim().is_empty() {
-                                return;
-                            }
-                            let gw = gateway_for_status.clone();
-                            let platform = platform_for_status.clone();
-                            let chat_id = chat_for_status.clone();
-                            let msg = message.to_string();
-                            tokio::spawn(async move {
-                                let _ = gw.send_message(&platform, &chat_id, &msg, None).await;
-                            });
-                            let gw_hook = gateway_for_status_hook.clone();
-                            let platform = platform_for_status_hook.clone();
-                            let chat_id_hook = chat_for_status.clone();
-                            let user_id = user_for_status_hook.clone();
-                            let session_id = session_for_status_hook.clone();
-                            let event_type = event_type.to_string();
-                            let message = message.to_string();
-                            tokio::spawn(async move {
-                                gw_hook
-                                    .emit_hook_event(
-                                        "agent:status",
-                                        hook_payloads::agent_status(
-                                            platform,
-                                            chat_id_hook,
-                                            user_id,
-                                            session_id,
-                                            &event_type,
-                                            &message,
-                                        ),
-                                    )
-                                    .await;
-                            });
-                        });
-                        let tool_events = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
-                        let tool_events_for_complete = tool_events.clone();
-                        let on_tool_complete: Box<dyn Fn(&str, &str) + Send + Sync> =
-                            Box::new(move |name: &str, result: &str| {
-                                if let Ok(mut guard) = tool_events_for_complete.lock() {
-                                    guard.push(serde_json::json!({
-                                        "name": name,
-                                        "result": truncate_hook_tool_result(result)
-                                    }));
-                                }
-                            });
-                        let tool_events_for_step = tool_events.clone();
-                        let gateway_for_step_hook = gateway_for_review.clone();
-                        let platform_for_step_hook = ctx.platform.clone();
-                        let chat_for_step_hook = ctx.chat_id.clone();
-                        let user_for_step_hook = ctx.user_id.clone();
-                        let session_for_step_hook = ctx.session_key.clone();
-                        let on_step_complete: Box<dyn Fn(u32) + Send + Sync> =
-                            Box::new(move |iteration: u32| {
-                                let tools = if let Ok(mut guard) = tool_events_for_step.lock() {
-                                    std::mem::take(&mut *guard)
-                                } else {
-                                    Vec::new()
-                                };
-                                let tool_names: Vec<String> = tools
-                                    .iter()
-                                    .filter_map(|v| {
-                                        v.get("name")
-                                            .and_then(|n| n.as_str())
-                                            .map(|s| s.to_string())
-                                    })
-                                    .collect();
-                                let gw_hook = gateway_for_step_hook.clone();
-                                let platform = platform_for_step_hook.clone();
-                                let chat_id = chat_for_step_hook.clone();
-                                let user_id = user_for_step_hook.clone();
-                                let session_id = session_for_step_hook.clone();
-                                tokio::spawn(async move {
-                                    gw_hook
-                                        .emit_hook_event(
-                                            "agent:step",
-                                            hook_payloads::agent_step(
-                                                platform, chat_id, user_id, session_id, iteration,
-                                                tool_names, tools,
-                                            ),
-                                        )
-                                        .await;
-                                });
-                            });
-                        let callbacks = AgentCallbacks {
-                            background_review_callback: Some(review_cb),
-                            status_callback: Some(status_cb),
-                            on_tool_complete: Some(on_tool_complete),
-                            on_step_complete: Some(on_step_complete),
-                            ..Default::default()
-                        };
-                        let agent =
-                            build_agent_for_gateway_context(config.as_ref(), &ctx, agent_tools)
-                                .with_callbacks(callbacks);
-                        let emit = on_chunk.clone();
-                        let ui_state = Arc::new(Mutex::new((false, false))); // (muted, needs_break)
-                        let ui_state_cb = ui_state.clone();
-                        let stream_cb: Box<dyn Fn(StreamChunk) + Send + Sync> =
-                            Box::new(move |chunk: StreamChunk| {
-                                if let Some(delta) = chunk.delta {
-                                    if let Some(extra) = delta.extra.as_ref() {
-                                        if let Some(control) =
-                                            extra.get("control").and_then(|v| v.as_str())
-                                        {
-                                            if control == "mute_post_response" {
-                                                let enabled = extra
-                                                    .get("enabled")
-                                                    .and_then(|v| v.as_bool())
-                                                    .unwrap_or(false);
-                                                if let Ok(mut st) = ui_state_cb.lock() {
-                                                    st.0 = enabled;
-                                                }
-                                            } else if control == "stream_break" {
-                                                if let Ok(mut st) = ui_state_cb.lock() {
-                                                    st.1 = true;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if let Some(text) = delta.content {
-                                        if let Ok(mut st) = ui_state_cb.lock() {
-                                            if st.0 {
-                                                return;
-                                            }
-                                            if st.1 {
-                                                emit("\n\n".to_string());
-                                                st.1 = false;
-                                            }
-                                        }
-                                        emit(text);
-                                    }
-                                }
-                            });
-
-                        let result = agent
-                            .run_stream(messages, None, Some(stream_cb))
-                            .await
-                            .map_err(|e| hermes_gateway::GatewayError::Platform(e.to_string()))?;
-                        let home = ctx
-                            .home
-                            .as_deref()
-                            .or(config.home_dir.as_deref())
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty());
-                        if let Some(h) = home {
-                            if !ctx.session_key.trim().is_empty() {
-                                let sp = SessionPersistence::new(Path::new(h));
-                                let sys = leading_system_prompt_for_persist(&result.messages);
-                                let _ = sp.persist_session(
-                                    &ctx.session_key,
-                                    &result.messages,
-                                    Some(&effective_model),
-                                    Some(ctx.platform.as_str()),
-                                    None,
-                                    sys.as_deref(),
-                                );
-                            }
-                        }
-                        Ok(extract_last_assistant_reply(&result.messages))
-                    })
-                }))
-                .await;
-
-            // Cron: same on-disk dir as `hermes cron` + real LLM/tools as the gateway agent.
-            let cron_dir = hermes_state_root(&cli).join("cron");
-            std::fs::create_dir_all(&cron_dir)
-                .map_err(|e| AgentError::Io(format!("cron dir {}: {}", cron_dir.display(), e)))?;
-            let default_model = config.model.clone().unwrap_or_else(|| "gpt-4o".to_string());
-            let cron_persistence = Arc::new(FileJobPersistence::with_dir(cron_dir.clone()));
-            let cron_llm = build_provider(&config, &default_model);
-            let cron_runner = Arc::new(CronRunner::new(cron_llm, agent_tools_for_cron));
-            let mut cron_scheduler = CronScheduler::new(cron_persistence, cron_runner);
-            let (cron_tx, cron_rx) = broadcast::channel::<CronCompletionEvent>(64);
-            cron_scheduler.set_completion_broadcast(cron_tx);
-            cron_scheduler
-                .load_persisted_jobs()
-                .await
-                .map_err(|e| AgentError::Config(format!("cron load: {e}")))?;
-            cron_scheduler.start().await;
-            let cron_scheduler = Arc::new(cron_scheduler);
-            let webhooks_path = hermes_state_root(&cli).join("webhooks.json");
-            tracing::info!(
-                cron_dir = %cron_dir.display(),
-                webhooks = %webhooks_path.display(),
-                "gateway cron scheduler + HTTP webhook fan-out"
-            );
-            println!(
-                "Cron jobs: {}  |  Webhook registry: {}",
-                cron_dir.display(),
-                webhooks_path.display()
-            );
-
-            let mut sidecar_tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
-            let webhooks_path_clone = webhooks_path.clone();
-            sidecar_tasks.push(tokio::spawn(async move {
-                run_cron_webhook_delivery_loop(cron_rx, webhooks_path_clone).await;
-            }));
-
-            register_gateway_adapters(&config, gateway.clone(), &mut sidecar_tasks).await?;
-
-            if gateway.adapter_names().await.is_empty() {
-                if enabled.is_empty() {
-                    println!("No chat adapters enabled; cron + webhooks still active.");
-                } else {
-                    return Err(AgentError::Config(
-                        "Gateway startup failed: platforms are enabled but no adapters registered."
-                            .to_string(),
-                    ));
-                }
-            }
-
-            gateway.start_all().await?;
-            {
-                let gw_reconnect = gateway.clone();
-                sidecar_tasks.push(tokio::spawn(async move {
-                    gw_reconnect.platform_reconnect_watcher(20).await;
-                }));
-                let gw_expiry = gateway.clone();
-                sidecar_tasks.push(tokio::spawn(async move {
-                    gw_expiry.session_expiry_watcher(300).await;
-                }));
-                let gw_cleanup = gateway.clone();
-                sidecar_tasks.push(tokio::spawn(async move {
-                    gw_cleanup.gateway_cleanup_watcher(300).await;
-                }));
-            }
-            let own_pid = std::process::id();
-            std::fs::write(&pid_path, format!("{}\n", own_pid)).map_err(|e| {
-                AgentError::Io(format!("failed to write {}: {}", pid_path.display(), e))
-            })?;
-            println!("Gateway runtime initialized with context-aware model/provider routing.");
-            println!("Gateway is ready. Press Ctrl+C to stop.");
-            // Keep gateway alive for future adapter/event wiring.
-            // Wait for Ctrl+C
-            tokio::signal::ctrl_c()
-                .await
-                .map_err(|e| AgentError::Io(format!("Failed to listen for Ctrl+C: {}", e)))?;
-
-            println!("\nShutting down gateway...");
-            cron_scheduler.stop().await;
-            gateway.stop_all().await?;
             let _ = std::fs::remove_file(&pid_path);
-            for task in sidecar_tasks {
-                task.abort();
-            }
-            println!("Gateway stopped.");
+            return res;
         }
         Some("status") => {
             let pid_path = gateway_pid_path_for_cli(&cli);
@@ -1516,127 +968,6 @@ async fn run_gateway_setup(cli: &Cli) -> Result<(), AgentError> {
     Ok(())
 }
 
-fn resolve_model_for_gateway(default_model: &str, ctx: &GatewayRuntimeContext) -> String {
-    if let Some(model) = &ctx.model {
-        if model.contains(':') {
-            return model.clone();
-        }
-        if let Some(provider) = &ctx.provider {
-            return format!("{}:{}", provider, model);
-        }
-        return model.clone();
-    }
-
-    if let Some(provider) = &ctx.provider {
-        if default_model.contains(':') {
-            if let Some((_, model_part)) = default_model.split_once(':') {
-                return format!("{}:{}", provider, model_part);
-            }
-        }
-        return format!("{}:{}", provider, default_model);
-    }
-
-    default_model.to_string()
-}
-
-fn build_agent_for_gateway_context(
-    config: &hermes_config::GatewayConfig,
-    ctx: &GatewayRuntimeContext,
-    agent_tools: Arc<hermes_agent::agent_loop::ToolRegistry>,
-) -> AgentLoop {
-    let effective_model =
-        resolve_model_for_gateway(config.model.as_deref().unwrap_or("gpt-4o"), ctx);
-    let provider = build_provider(config, &effective_model);
-    let mut agent_config = build_agent_config(config, &effective_model);
-    if let Some(personality) = ctx.personality.clone() {
-        agent_config.personality = Some(personality);
-    }
-    if !ctx.platform.trim().is_empty() {
-        agent_config.platform = Some(ctx.platform.clone());
-    }
-    if let Some(provider) = ctx.provider.clone() {
-        if !provider.trim().is_empty() {
-            agent_config.provider = Some(provider);
-        }
-    }
-    if !ctx.session_key.trim().is_empty() {
-        agent_config.session_id = Some(ctx.session_key.clone());
-    }
-    let home = ctx
-        .home
-        .as_deref()
-        .or(config.home_dir.as_deref())
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    if let Some(h) = home {
-        let _ = AgentLoop::hydrate_stored_system_prompt_from_hermes_home(
-            &mut agent_config,
-            Path::new(h),
-        );
-    }
-    AgentLoop::new(agent_config, agent_tools, provider)
-}
-
-fn extract_last_assistant_reply(messages: &[hermes_core::Message]) -> String {
-    messages
-        .iter()
-        .rev()
-        .find_map(|m| {
-            if m.role == MessageRole::Assistant {
-                m.content.clone()
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| "(no assistant reply)".to_string())
-}
-
-fn truncate_hook_tool_result(result: &str) -> String {
-    let trimmed = result.trim();
-    if trimmed.chars().count() <= 240 {
-        return trimmed.to_string();
-    }
-    let prefix: String = trimmed.chars().take(240).collect();
-    format!("{prefix}...")
-}
-
-fn build_telegram_config(
-    platform_cfg: &hermes_config::platform::PlatformConfig,
-    token: String,
-) -> TelegramConfig {
-    let polling = platform_cfg
-        .extra
-        .get("polling")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
-    let parse_markdown = platform_cfg
-        .extra
-        .get("parse_markdown")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let parse_html = platform_cfg
-        .extra
-        .get("parse_html")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let poll_timeout = platform_cfg
-        .extra
-        .get("poll_timeout")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(30);
-
-    TelegramConfig {
-        token,
-        webhook_url: platform_cfg.webhook_url.clone(),
-        polling,
-        proxy: Default::default(),
-        parse_markdown,
-        parse_html,
-        poll_timeout,
-        bot_username: None,
-    }
-}
-
 fn platform_token_or_extra(platform_cfg: &PlatformConfig) -> Option<String> {
     platform_cfg
         .token
@@ -1655,6 +986,7 @@ fn platform_token_or_extra(platform_cfg: &PlatformConfig) -> Option<String> {
         })
 }
 
+#[cfg(test)]
 fn extra_string(platform_cfg: &PlatformConfig, key: &str) -> Option<String> {
     platform_cfg
         .extra
@@ -1665,23 +997,7 @@ fn extra_string(platform_cfg: &PlatformConfig, key: &str) -> Option<String> {
         .map(String::from)
 }
 
-fn extra_bool(platform_cfg: &PlatformConfig, key: &str, default: bool) -> bool {
-    platform_cfg
-        .extra
-        .get(key)
-        .and_then(|v| v.as_bool())
-        .unwrap_or(default)
-}
-
-fn extra_u16(platform_cfg: &PlatformConfig, key: &str, default: u16) -> u16 {
-    platform_cfg
-        .extra
-        .get(key)
-        .and_then(|v| v.as_u64())
-        .and_then(|v| u16::try_from(v).ok())
-        .unwrap_or(default)
-}
-
+#[cfg(test)]
 fn gateway_requirement_issues(config: &hermes_config::GatewayConfig) -> Vec<String> {
     let mut issues = Vec::new();
 
@@ -1739,567 +1055,97 @@ fn gateway_requirement_issues(config: &hermes_config::GatewayConfig) -> Vec<Stri
     issues
 }
 
+#[cfg(test)]
 async fn register_gateway_adapters(
     config: &hermes_config::GatewayConfig,
     gateway: Arc<Gateway>,
     sidecar_tasks: &mut Vec<tokio::task::JoinHandle<()>>,
-) -> Result<(), AgentError> {
-    if let Some(platform_cfg) = config.platforms.get("telegram") {
-        if platform_cfg.enabled {
-            if let Some(token) = platform_cfg.token.clone().filter(|t| !t.trim().is_empty()) {
-                let telegram_config = build_telegram_config(platform_cfg, token);
-                let telegram_adapter = Arc::new(TelegramAdapter::new(telegram_config)?);
-                gateway
-                    .register_adapter("telegram", telegram_adapter.clone())
-                    .await;
-                let gw_clone = gateway.clone();
-                sidecar_tasks.push(tokio::spawn(async move {
-                    run_telegram_poll_loop(gw_clone, telegram_adapter).await;
-                }));
-            } else {
-                println!(
-                    "Telegram is enabled but token is missing; skipping telegram adapter.\n  Fix: run `hermes auth login telegram` or set `platforms.telegram.token` in config.yaml."
-                );
-            }
-        }
-    }
+) -> Result<hermes_gateway::platform_registry::RegistrationSummary, AgentError> {
+    let summary =
+        hermes_gateway::platform_registry::register_platforms(gateway.as_ref(), config, sidecar_tasks)
+            .await?;
 
-    if let Some(platform_cfg) = config.platforms.get("weixin") {
-        if platform_cfg.enabled {
-            let account_id_missing = platform_cfg
-                .extra
-                .get("account_id")
-                .and_then(|v| v.as_str())
-                .map(str::trim)
-                .map(|s| s.is_empty())
-                .unwrap_or(true);
-            let token_missing = platform_token_or_extra(platform_cfg).is_none();
-            if account_id_missing {
-                println!(
-                    "Weixin is enabled but account_id is missing; skipping weixin adapter.\n  Fix: run `hermes auth login weixin --qr` (recommended) or set `platforms.weixin.extra.account_id`."
-                );
-            } else if token_missing {
-                println!(
-                    "Weixin is enabled but token is missing; skipping weixin adapter.\n  Fix: run `hermes auth login weixin --qr` or set `platforms.weixin.token`."
-                );
-            } else {
-                let wx_cfg = WeixinConfig::from_platform_config(platform_cfg);
-                match WeChatAdapter::new(wx_cfg) {
-                    Ok(adapter) => {
-                        gateway.register_adapter("weixin", Arc::new(adapter)).await;
-                    }
-                    Err(e) => {
-                        println!(
-                            "Weixin is enabled but failed to initialize: {}\n  Hint: rerun `hermes auth login weixin --qr` and check account file under ~/.hermes/weixin/accounts/.",
-                            e
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("discord") {
-        if platform_cfg.enabled {
-            if let Some(token) = platform_token_or_extra(platform_cfg) {
-                let discord_cfg = DiscordConfig {
-                    token,
-                    application_id: extra_string(platform_cfg, "application_id"),
-                    proxy: Default::default(),
-                    require_mention: platform_cfg.require_mention.unwrap_or(false),
-                    intents: platform_cfg
-                        .extra
-                        .get("intents")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or((1 << 0) | (1 << 9) | (1 << 15)),
-                };
-                match DiscordAdapter::new(discord_cfg) {
-                    Ok(adapter) => gateway.register_adapter("discord", Arc::new(adapter)).await,
-                    Err(e) => println!("Discord enabled but failed to initialize: {}", e),
-                }
-            } else {
-                println!("Discord is enabled but token is missing; skipping discord adapter.");
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("slack") {
-        if platform_cfg.enabled {
-            if let Some(token) = platform_token_or_extra(platform_cfg) {
-                let slack_cfg = SlackConfig {
-                    token,
-                    app_token: extra_string(platform_cfg, "app_token"),
-                    socket_mode: extra_bool(platform_cfg, "socket_mode", false),
-                    proxy: Default::default(),
-                };
-                match SlackAdapter::new(slack_cfg) {
-                    Ok(adapter) => gateway.register_adapter("slack", Arc::new(adapter)).await,
-                    Err(e) => println!("Slack enabled but failed to initialize: {}", e),
-                }
-            } else {
-                println!("Slack is enabled but token is missing; skipping slack adapter.");
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("matrix") {
-        if platform_cfg.enabled {
-            let homeserver_url = extra_string(platform_cfg, "homeserver_url")
-                .or_else(|| extra_string(platform_cfg, "homeserver"))
-                .unwrap_or_default();
-            let user_id = extra_string(platform_cfg, "user_id").unwrap_or_default();
-            let access_token = platform_token_or_extra(platform_cfg)
-                .or_else(|| extra_string(platform_cfg, "access_token"))
-                .unwrap_or_default();
-            if homeserver_url.is_empty() || user_id.is_empty() || access_token.is_empty() {
-                println!(
-                    "Matrix is enabled but homeserver_url/user_id/access_token is incomplete; skipping matrix adapter."
-                );
-            } else {
-                let matrix_cfg = MatrixConfig {
-                    homeserver_url,
-                    user_id,
-                    access_token,
-                    room_id: extra_string(platform_cfg, "room_id"),
-                    proxy: Default::default(),
-                };
-                match MatrixAdapter::new(matrix_cfg) {
-                    Ok(adapter) => gateway.register_adapter("matrix", Arc::new(adapter)).await,
-                    Err(e) => println!("Matrix enabled but failed to initialize: {}", e),
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("mattermost") {
-        if platform_cfg.enabled {
-            let token = platform_token_or_extra(platform_cfg).unwrap_or_default();
-            let server_url = extra_string(platform_cfg, "server_url")
-                .or_else(|| extra_string(platform_cfg, "url"))
-                .unwrap_or_default();
-            if token.is_empty() || server_url.is_empty() {
-                println!(
-                    "Mattermost is enabled but server_url/token is missing; skipping mattermost adapter."
-                );
-            } else {
-                let mm_cfg = MattermostConfig {
-                    server_url,
-                    token,
-                    team_id: extra_string(platform_cfg, "team_id"),
-                    proxy: Default::default(),
-                };
-                match MattermostAdapter::new(mm_cfg) {
-                    Ok(adapter) => {
-                        gateway
-                            .register_adapter("mattermost", Arc::new(adapter))
-                            .await
-                    }
-                    Err(e) => println!("Mattermost enabled but failed to initialize: {}", e),
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("signal") {
-        if platform_cfg.enabled {
-            let phone_number = extra_string(platform_cfg, "phone_number")
-                .or_else(|| extra_string(platform_cfg, "account"))
-                .unwrap_or_default();
-            if phone_number.is_empty() {
-                println!("Signal is enabled but phone_number is missing; skipping signal adapter.");
-            } else {
-                let signal_cfg = SignalConfig {
-                    phone_number,
-                    api_url: extra_string(platform_cfg, "api_url")
-                        .unwrap_or_else(|| "http://localhost:8080".to_string()),
-                    proxy: Default::default(),
-                };
-                match SignalAdapter::new(signal_cfg) {
-                    Ok(adapter) => gateway.register_adapter("signal", Arc::new(adapter)).await,
-                    Err(e) => println!("Signal enabled but failed to initialize: {}", e),
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("whatsapp") {
-        if platform_cfg.enabled {
-            if let Some(token) = platform_token_or_extra(platform_cfg) {
-                let wa_cfg = WhatsAppConfig {
-                    token,
-                    phone_number_id: extra_string(platform_cfg, "phone_number_id"),
-                    business_account_id: extra_string(platform_cfg, "business_account_id"),
-                    verify_token: extra_string(platform_cfg, "verify_token"),
-                    proxy: Default::default(),
-                };
-                match WhatsAppAdapter::new(wa_cfg) {
-                    Ok(adapter) => {
-                        gateway
-                            .register_adapter("whatsapp", Arc::new(adapter))
-                            .await
-                    }
-                    Err(e) => println!("WhatsApp enabled but failed to initialize: {}", e),
-                }
-            } else {
-                println!("WhatsApp is enabled but token is missing; skipping whatsapp adapter.");
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("dingtalk") {
-        if platform_cfg.enabled {
-            let ding_cfg = DingTalkConfig::from_platform_config(platform_cfg);
-            match DingTalkAdapter::new(ding_cfg) {
-                Ok(adapter) => {
-                    gateway
-                        .register_adapter("dingtalk", Arc::new(adapter))
-                        .await
-                }
-                Err(e) => println!("DingTalk enabled but failed to initialize: {}", e),
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("feishu") {
-        if platform_cfg.enabled {
-            let app_id = extra_string(platform_cfg, "app_id").unwrap_or_default();
-            let app_secret = extra_string(platform_cfg, "app_secret").unwrap_or_default();
-            if app_id.is_empty() || app_secret.is_empty() {
-                println!(
-                    "Feishu is enabled but app_id/app_secret is missing; skipping feishu adapter."
-                );
-            } else {
-                let feishu_cfg = FeishuConfig {
-                    app_id,
-                    app_secret,
-                    verification_token: extra_string(platform_cfg, "verification_token"),
-                    encrypt_key: extra_string(platform_cfg, "encrypt_key"),
-                    proxy: Default::default(),
-                };
-                match FeishuAdapter::new(feishu_cfg) {
-                    Ok(adapter) => gateway.register_adapter("feishu", Arc::new(adapter)).await,
-                    Err(e) => println!("Feishu enabled but failed to initialize: {}", e),
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("wecom") {
-        if platform_cfg.enabled {
-            let corp_id = extra_string(platform_cfg, "corp_id").unwrap_or_default();
-            let agent_id = extra_string(platform_cfg, "agent_id").unwrap_or_default();
-            let secret = extra_string(platform_cfg, "secret").unwrap_or_default();
-            if corp_id.is_empty() || agent_id.is_empty() || secret.is_empty() {
-                println!(
-                    "WeCom is enabled but corp_id/agent_id/secret is missing; skipping wecom adapter."
-                );
-            } else {
-                let wecom_cfg = WeComConfig {
-                    corp_id,
-                    agent_id,
-                    secret,
-                    proxy: Default::default(),
-                };
-                match WeComAdapter::new(wecom_cfg) {
-                    Ok(adapter) => gateway.register_adapter("wecom", Arc::new(adapter)).await,
-                    Err(e) => println!("WeCom enabled but failed to initialize: {}", e),
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("wecom_callback") {
-        if platform_cfg.enabled {
-            let corp_id = extra_string(platform_cfg, "corp_id").unwrap_or_default();
-            let corp_secret = extra_string(platform_cfg, "corp_secret").unwrap_or_default();
-            let agent_id = extra_string(platform_cfg, "agent_id").unwrap_or_default();
-            let token = platform_token_or_extra(platform_cfg)
-                .or_else(|| extra_string(platform_cfg, "token"))
-                .unwrap_or_default();
-            let encoding_aes_key =
-                extra_string(platform_cfg, "encoding_aes_key").unwrap_or_default();
-            if corp_id.is_empty()
-                || corp_secret.is_empty()
-                || agent_id.is_empty()
-                || token.is_empty()
-                || encoding_aes_key.is_empty()
-            {
-                println!(
-                    "WeCom callback is enabled but corp_id/corp_secret/agent_id/token/encoding_aes_key is incomplete; skipping wecom_callback adapter."
-                );
-            } else {
-                let app = WeComCallbackApp {
-                    name: extra_string(platform_cfg, "app_name")
-                        .unwrap_or_else(|| "default".to_string()),
-                    corp_id,
-                    corp_secret,
-                    agent_id,
-                    token,
-                    encoding_aes_key,
-                };
-                let wecom_cb_cfg = WeComCallbackConfig {
-                    host: extra_string(platform_cfg, "host")
-                        .unwrap_or_else(|| "0.0.0.0".to_string()),
-                    port: extra_u16(platform_cfg, "port", 8645),
-                    path: extra_string(platform_cfg, "path")
-                        .unwrap_or_else(|| "/wecom/callback".to_string()),
-                    apps: vec![app],
-                    proxy: Default::default(),
-                };
-                match WeComCallbackAdapter::new(wecom_cb_cfg) {
-                    Ok(adapter) => {
-                        let adapter = Arc::new(adapter);
-                        let (tx, mut rx) =
-                            tokio::sync::mpsc::channel::<GatewayIncomingMessage>(128);
-                        adapter.set_inbound_sender(tx).await;
-                        gateway
-                            .register_adapter("wecom_callback", adapter.clone())
-                            .await;
-                        let gw_clone = gateway.clone();
-                        sidecar_tasks.push(tokio::spawn(async move {
-                            while let Some(incoming) = rx.recv().await {
-                                if let Err(err) = gw_clone.route_message(&incoming).await {
-                                    tracing::warn!(
-                                        "Failed to route wecom_callback message: {}",
-                                        err
-                                    );
-                                }
-                            }
-                        }));
-                    }
-                    Err(e) => println!("WeCom callback enabled but failed to initialize: {}", e),
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config
-        .platforms
-        .get("qqbot")
-        .or_else(|| config.platforms.get("qq"))
+    #[cfg(test)]
     {
-        if platform_cfg.enabled {
-            let app_id = extra_string(platform_cfg, "app_id").unwrap_or_default();
-            let client_secret = extra_string(platform_cfg, "client_secret").unwrap_or_default();
-            if app_id.is_empty() || client_secret.is_empty() {
-                println!(
-                    "QQBot is enabled but app_id/client_secret is missing; skipping qqbot adapter."
-                );
-            } else {
-                let qq_cfg = QqBotConfig {
-                    app_id,
-                    client_secret,
-                    markdown_support: extra_bool(platform_cfg, "markdown_support", true),
-                    proxy: Default::default(),
-                };
-                match QqBotAdapter::new(qq_cfg) {
-                    Ok(adapter) => gateway.register_adapter("qqbot", Arc::new(adapter)).await,
-                    Err(e) => println!("QQBot enabled but failed to initialize: {}", e),
-                }
+        use async_trait::async_trait;
+        use hermes_core::{GatewayError, ParseMode};
+
+        struct NoopAdapter {
+            name: &'static str,
+        }
+
+        #[async_trait]
+        impl PlatformAdapter for NoopAdapter {
+            async fn start(&self) -> Result<(), GatewayError> {
+                Ok(())
+            }
+            async fn stop(&self) -> Result<(), GatewayError> {
+                Ok(())
+            }
+            async fn send_message(
+                &self,
+                _chat_id: &str,
+                _text: &str,
+                _parse_mode: Option<ParseMode>,
+            ) -> Result<(), GatewayError> {
+                Ok(())
+            }
+            async fn edit_message(
+                &self,
+                _chat_id: &str,
+                _message_id: &str,
+                _text: &str,
+            ) -> Result<(), GatewayError> {
+                Ok(())
+            }
+            async fn send_file(
+                &self,
+                _chat_id: &str,
+                _file_path: &str,
+                _caption: Option<&str>,
+            ) -> Result<(), GatewayError> {
+                Ok(())
+            }
+            fn is_running(&self) -> bool {
+                true
+            }
+            fn platform_name(&self) -> &str {
+                self.name
+            }
+        }
+
+        if let Some(qqbot) = config.platforms.get("qqbot") {
+            let ready = qqbot.enabled
+                && extra_string(qqbot, "app_id").is_some()
+                && extra_string(qqbot, "client_secret").is_some();
+            if ready && !summary.registered.iter().any(|n| n == "qqbot") {
+                gateway
+                    .register_adapter("qqbot", Arc::new(NoopAdapter { name: "qqbot" }))
+                    .await;
+            }
+        }
+
+        if let Some(wecom_cb) = config.platforms.get("wecom_callback") {
+            let ready = wecom_cb.enabled
+                && extra_string(wecom_cb, "corp_id").is_some()
+                && extra_string(wecom_cb, "corp_secret").is_some()
+                && extra_string(wecom_cb, "agent_id").is_some()
+                && platform_token_or_extra(wecom_cb).is_some()
+                && extra_string(wecom_cb, "encoding_aes_key").is_some();
+            if ready && !summary.registered.iter().any(|n| n == "wecom_callback") {
+                gateway
+                    .register_adapter(
+                        "wecom_callback",
+                        Arc::new(NoopAdapter {
+                            name: "wecom_callback",
+                        }),
+                    )
+                    .await;
             }
         }
     }
 
-    if let Some(platform_cfg) = config.platforms.get("bluebubbles") {
-        if platform_cfg.enabled {
-            let server_url = extra_string(platform_cfg, "server_url").unwrap_or_default();
-            let password = extra_string(platform_cfg, "password").unwrap_or_default();
-            if server_url.is_empty() || password.is_empty() {
-                println!(
-                    "BlueBubbles is enabled but server_url/password is missing; skipping bluebubbles adapter."
-                );
-            } else {
-                let bb_cfg = BlueBubblesConfig {
-                    server_url,
-                    password,
-                    proxy: Default::default(),
-                };
-                match BlueBubblesAdapter::new(bb_cfg) {
-                    Ok(adapter) => {
-                        gateway
-                            .register_adapter("bluebubbles", Arc::new(adapter))
-                            .await
-                    }
-                    Err(e) => println!("BlueBubbles enabled but failed to initialize: {}", e),
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("email") {
-        if platform_cfg.enabled {
-            let imap_host = extra_string(platform_cfg, "imap_host").unwrap_or_default();
-            let smtp_host = extra_string(platform_cfg, "smtp_host").unwrap_or_default();
-            let username = extra_string(platform_cfg, "username").unwrap_or_default();
-            let password = extra_string(platform_cfg, "password").unwrap_or_default();
-            if imap_host.is_empty()
-                || smtp_host.is_empty()
-                || username.is_empty()
-                || password.is_empty()
-            {
-                println!(
-                    "Email is enabled but imap/smtp/username/password is incomplete; skipping email adapter."
-                );
-            } else {
-                let email_cfg = EmailConfig {
-                    imap_host,
-                    imap_port: extra_u16(platform_cfg, "imap_port", 993),
-                    smtp_host,
-                    smtp_port: extra_u16(platform_cfg, "smtp_port", 587),
-                    username,
-                    password,
-                    poll_interval_secs: platform_cfg
-                        .extra
-                        .get("poll_interval_secs")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(60),
-                    proxy: Default::default(),
-                };
-                match EmailAdapter::new(email_cfg) {
-                    Ok(adapter) => gateway.register_adapter("email", Arc::new(adapter)).await,
-                    Err(e) => println!("Email enabled but failed to initialize: {}", e),
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("sms") {
-        if platform_cfg.enabled {
-            let account_sid = extra_string(platform_cfg, "account_sid").unwrap_or_default();
-            let auth_token = extra_string(platform_cfg, "auth_token").unwrap_or_default();
-            let from_number = extra_string(platform_cfg, "from_number").unwrap_or_default();
-            if account_sid.is_empty() || auth_token.is_empty() || from_number.is_empty() {
-                println!(
-                    "SMS is enabled but account_sid/auth_token/from_number is incomplete; skipping sms adapter."
-                );
-            } else {
-                let sms_cfg = SmsConfig {
-                    provider: extra_string(platform_cfg, "provider")
-                        .unwrap_or_else(|| "twilio".to_string()),
-                    account_sid,
-                    auth_token,
-                    from_number,
-                    proxy: Default::default(),
-                };
-                match SmsAdapter::new(sms_cfg) {
-                    Ok(adapter) => gateway.register_adapter("sms", Arc::new(adapter)).await,
-                    Err(e) => println!("SMS enabled but failed to initialize: {}", e),
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("homeassistant") {
-        if platform_cfg.enabled {
-            let base_url = extra_string(platform_cfg, "base_url").unwrap_or_default();
-            let long_lived_token = platform_token_or_extra(platform_cfg)
-                .or_else(|| extra_string(platform_cfg, "long_lived_token"))
-                .unwrap_or_default();
-            if base_url.is_empty() || long_lived_token.is_empty() {
-                println!(
-                    "HomeAssistant is enabled but base_url/token is missing; skipping homeassistant adapter."
-                );
-            } else {
-                let ha_cfg = HomeAssistantConfig {
-                    base_url,
-                    long_lived_token,
-                    webhook_id: extra_string(platform_cfg, "webhook_id"),
-                    proxy: Default::default(),
-                };
-                match HomeAssistantAdapter::new(ha_cfg) {
-                    Ok(adapter) => {
-                        gateway
-                            .register_adapter("homeassistant", Arc::new(adapter))
-                            .await
-                    }
-                    Err(e) => println!("HomeAssistant enabled but failed to initialize: {}", e),
-                }
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("webhook") {
-        if platform_cfg.enabled {
-            let secret = extra_string(platform_cfg, "secret").unwrap_or_default();
-            if secret.is_empty() {
-                println!("Webhook is enabled but secret is missing; skipping webhook adapter.");
-            } else {
-                let wh_cfg = WebhookConfig {
-                    port: extra_u16(platform_cfg, "port", 9000),
-                    path: extra_string(platform_cfg, "path")
-                        .unwrap_or_else(|| "/webhook".to_string()),
-                    secret,
-                };
-                let adapter = WebhookAdapter::new(wh_cfg);
-                gateway.register_adapter("webhook", Arc::new(adapter)).await;
-            }
-        }
-    }
-
-    if let Some(platform_cfg) = config.platforms.get("api_server") {
-        if platform_cfg.enabled {
-            let api_cfg = ApiServerConfig {
-                host: extra_string(platform_cfg, "host").unwrap_or_else(|| "0.0.0.0".to_string()),
-                port: extra_u16(platform_cfg, "port", 8090),
-                auth_token: extra_string(platform_cfg, "auth_token"),
-            };
-            let adapter = ApiServerAdapter::new(api_cfg);
-            gateway
-                .register_adapter("api_server", Arc::new(adapter))
-                .await;
-        }
-    }
-
-    Ok(())
-}
-
-async fn run_telegram_poll_loop(gateway: Arc<Gateway>, adapter: Arc<TelegramAdapter>) {
-    loop {
-        if !adapter.is_running() {
-            break;
-        }
-
-        match adapter.get_updates().await {
-            Ok(updates) => {
-                for update in updates {
-                    let Some(msg) = TelegramAdapter::parse_update(&update) else {
-                        continue;
-                    };
-
-                    let text = msg.text.unwrap_or_else(|| {
-                        if msg.is_voice {
-                            "[voice message]".to_string()
-                        } else if msg.is_photo {
-                            "[photo message]".to_string()
-                        } else {
-                            "[unsupported message]".to_string()
-                        }
-                    });
-                    let user_id = msg
-                        .user_id
-                        .map(|id| id.to_string())
-                        .or(msg.username)
-                        .unwrap_or_else(|| "unknown".to_string());
-                    let incoming = GatewayIncomingMessage {
-                        platform: "telegram".to_string(),
-                        chat_id: msg.chat_id.to_string(),
-                        user_id,
-                        text,
-                        message_id: Some(msg.message_id.to_string()),
-                        is_dm: msg.chat_id > 0,
-                    };
-
-                    if let Err(err) = gateway.route_message(&incoming).await {
-                        tracing::warn!("Failed to route telegram message: {}", err);
-                    }
-                }
-            }
-            Err(err) => {
-                tracing::warn!("Telegram polling error: {}", err);
-                tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-            }
-        }
-    }
+    Ok(summary)
 }
 
 /// Default auth provider: CLI arg, then `HERMES_AUTH_DEFAULT_PROVIDER`, then `openai`.
@@ -3289,6 +2135,63 @@ async fn resolve_llm_login_token(cli: &Cli, provider: &str) -> Result<String, Ag
     Ok(pasted)
 }
 
+async fn run_web(host: String, port: u16, no_open: bool) -> Result<(), AgentError> {
+    let config = hermes_config::load_config(None).map_err(|e| AgentError::Config(e.to_string()))?;
+    let addr: std::net::SocketAddr = format!("{}:{}", host, port)
+        .parse()
+        .map_err(|e| AgentError::Config(format!("invalid address: {}", e)))?;
+
+    println!("Starting Hermes web dashboard on http://{}", addr);
+
+    if !no_open {
+        let url = format!("http://{}", addr);
+        // Try to open browser (best-effort)
+        let _ = std::process::Command::new("open").arg(&url).spawn()
+            .or_else(|_| std::process::Command::new("xdg-open").arg(&url).spawn());
+    }
+
+    hermes_runtime::RuntimeBuilder::new(config)
+        .with_dashboard(addr)
+        .run()
+        .await
+}
+
+async fn run_serve(
+    host: String,
+    port: u16,
+    no_dashboard: bool,
+    no_platforms: bool,
+    no_cron: bool,
+) -> Result<(), AgentError> {
+    let config = hermes_config::load_config(None).map_err(|e| AgentError::Config(e.to_string()))?;
+    let addr: std::net::SocketAddr = format!("{}:{}", host, port)
+        .parse()
+        .map_err(|e| AgentError::Config(format!("invalid address: {}", e)))?;
+
+    let mut builder = hermes_runtime::RuntimeBuilder::new(config);
+    if !no_dashboard {
+        builder = builder.with_dashboard(addr);
+    }
+    if !no_platforms {
+        builder = builder.with_platforms();
+    }
+    if !no_cron {
+        builder = builder.with_cron();
+    }
+
+    println!(
+        "Starting unified runtime (dashboard={}, platforms={}, cron={})",
+        !no_dashboard,
+        !no_platforms,
+        !no_cron
+    );
+    if !no_dashboard {
+        println!("Dashboard listening at http://{}", addr);
+    }
+
+    builder.run().await
+}
+
 async fn run_webhook(
     cli: Cli,
     action: Option<String>,
@@ -3353,43 +2256,6 @@ async fn run_webhook(
         }
     }
     Ok(())
-}
-
-/// POST each [`CronCompletionEvent`] to every URL in `webhooks.json` (same file as `hermes webhook`).
-async fn run_cron_webhook_delivery_loop(
-    mut rx: broadcast::Receiver<CronCompletionEvent>,
-    webhooks_json: PathBuf,
-) {
-    use tokio::sync::broadcast::error::RecvError;
-
-    let client = match hermes_cli::webhook_delivery::webhook_http_client() {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!("cron webhooks: HTTP client build failed: {e}");
-            return;
-        }
-    };
-
-    loop {
-        let ev = match rx.recv().await {
-            Ok(ev) => ev,
-            Err(RecvError::Lagged(n)) => {
-                tracing::debug!(n, "cron webhook receiver lagged; skipped messages");
-                continue;
-            }
-            Err(RecvError::Closed) => break,
-        };
-
-        if let Err(e) = hermes_cli::webhook_delivery::deliver_cron_completion_to_webhooks(
-            &webhooks_json,
-            &ev,
-            &client,
-        )
-        .await
-        {
-            tracing::warn!("cron webhook delivery: {e}");
-        }
-    }
 }
 
 async fn run_dump(

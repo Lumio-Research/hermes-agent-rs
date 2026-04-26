@@ -45,7 +45,7 @@ hermes-agent-rust/
     ├── hermes-mcp/           # Model Context Protocol client/server
     ├── hermes-acp/           # Agent Communication Protocol
     ├── hermes-eval/          # Evaluation framework (Runner, BenchmarkAdapter, Verifier)
-    ├── hermes-http/          # HTTP/WebSocket API server
+    ├── hermes-dashboard/     # Web dashboard + HTTP/WebSocket API server
     ├── hermes-auth/          # OAuth token exchange
     ├── hermes-telemetry/     # OpenTelemetry + Prometheus metrics
     └── hermes-parity-tests/  # Golden fixture tests for behavioral parity
@@ -65,7 +65,7 @@ hermes-cli (binary entry point)
 ├── hermes-tools (30 tool backends)
 ├── hermes-gateway (17 platform adapters)
 │   └── hermes-core
-├── hermes-http (REST/WS server)
+├── hermes-dashboard (REST/WS server)
 ├── hermes-cron (scheduling)
 ├── hermes-skills (skill management)
 ├── hermes-mcp (MCP client/server)

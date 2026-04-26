@@ -257,6 +257,11 @@ pub struct LlmProviderConfig {
     /// When unset, falls back to provider-specific `HERMES_<PROVIDER>_OAUTH_CLIENT_ID`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oauth_client_id: Option<String>,
+
+    /// Preferred upstream provider order (OpenRouter-specific).
+    /// e.g. ["DeepInfra", "Together"]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provider_order: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------

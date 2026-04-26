@@ -15,6 +15,7 @@
 //! context management into a fully autonomous loop that runs until the
 //! model finishes naturally or the turn budget is exhausted.
 
+pub mod agent_builder;
 pub mod agent_loop;
 pub mod api_bridge;
 pub mod auxiliary_builder;
@@ -28,6 +29,7 @@ pub mod credential_pool;
 pub mod fallback;
 pub mod honcho_provider;
 pub mod interrupt;
+pub mod local_agent_service;
 pub mod memory_manager;
 pub mod memory_plugins;
 pub mod oauth;
@@ -114,6 +116,9 @@ pub use sub_agent_orchestrator::{
 
 // Re-export honcho provider
 pub use honcho_provider::HonchoProvider;
+
+// Re-export local agent service
+pub use local_agent_service::LocalAgentService;
 
 // Re-export core types that consumers need
 pub use hermes_core::{

@@ -28,8 +28,12 @@ pub use tool_schema::{tool_schema, JsonSchema, ToolSchema};
 
 // Re-export trait definitions
 pub use traits::{
-    LlmProvider, MemoryProvider, PlatformAdapter, SkillProvider, TerminalBackend, ToolHandler,
+    AgentService, LlmProvider, MemoryProvider, PlatformAdapter, SkillProvider, TerminalBackend,
+    ToolHandler,
 };
+
+// Re-export AgentService supporting types
+pub use traits::{AgentOverrides, AgentReply};
 
 // Re-export tool call parser public API
 pub use tool_call_parser::{

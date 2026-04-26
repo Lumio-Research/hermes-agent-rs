@@ -1,4 +1,4 @@
-//! Optional Bearer API key, IP allowlist, and per-IP rate limiting for `hermes-http`.
+//! Optional Bearer API key, IP allowlist, and per-IP rate limiting for `hermes-dashboard`.
 //!
 //! Environment:
 //! - `HERMES_HTTP_API_KEY` — if set, require `Authorization: Bearer <key>` for all routes except `/health`, and `/metrics` unless `HERMES_HTTP_METRICS_REQUIRE_AUTH=1`.

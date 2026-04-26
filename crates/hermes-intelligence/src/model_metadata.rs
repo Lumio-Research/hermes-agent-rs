@@ -303,6 +303,30 @@ pub fn known_models() -> Vec<ModelInfo> {
             input_cost_per_million: Some(0.55),
             output_cost_per_million: Some(2.19),
         },
+        ModelInfo {
+            name: "deepseek-v4-flash".into(),
+            provider: "deepseek".into(),
+            context_window: 1_000_000,
+            max_output_tokens: Some(384_000),
+            supports_vision: false,
+            supports_tools: true,
+            supports_streaming: true,
+            supports_reasoning: true,
+            input_cost_per_million: Some(0.14),
+            output_cost_per_million: Some(0.28),
+        },
+        ModelInfo {
+            name: "deepseek-v4-pro".into(),
+            provider: "deepseek".into(),
+            context_window: 1_000_000,
+            max_output_tokens: Some(384_000),
+            supports_vision: false,
+            supports_tools: true,
+            supports_streaming: true,
+            supports_reasoning: true,
+            input_cost_per_million: Some(1.74),
+            output_cost_per_million: Some(3.48),
+        },
     ]
 }
 

@@ -198,7 +198,7 @@ pub fn prometheus_text() -> String {
     let _ = writeln!(&mut out, "hermes_errors_total {}", s.errors_total);
     let _ = writeln!(
         &mut out,
-        "# HELP hermes_http_requests_total HTTP API requests handled (hermes-http)."
+        "# HELP hermes_http_requests_total HTTP API requests handled (hermes-dashboard)."
     );
     let _ = writeln!(&mut out, "# TYPE hermes_http_requests_total counter");
     let _ = writeln!(

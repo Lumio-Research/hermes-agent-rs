@@ -1,17 +1,17 @@
 [package]
-name = "hermes-http"
+name = "hermes-dashboard"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
-description = "HTTP/WebSocket API server for Hermes Agent"
+description = "Web dashboard + HTTP/WebSocket API server for Hermes Agent"
 
 [features]
 default = []
 otlp = ["hermes-telemetry/otlp"]
 
 [[bin]]
-name = "hermes-http"
+name = "hermes-dashboard"
 path = "src/main.rs"
 
 [dependencies]
@@ -19,20 +19,26 @@ hermes-core = { workspace = true }
 hermes-agent = { workspace = true }
 hermes-tools = { workspace = true }
 hermes-config = { workspace = true }
-hermes-gateway = { workspace = true }
+hermes-cron = { workspace = true }
+hermes-skills = { workspace = true }
+hermes-environments = { workspace = true }
 hermes-telemetry = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
+rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9"
 tracing = { workspace = true }
 futures = { workspace = true }
 chrono = { workspace = true }
 axum = { version = "0.8", features = ["ws"] }
-tower-http = { version = "0.6", features = ["trace", "cors", "limit"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "limit", "fs"] }
+libc = "0.2"
 
 [dev-dependencies]
 reqwest = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 tracing-subscriber = { workspace = true }
+proptest = { workspace = true }

@@ -141,6 +141,43 @@ pub enum CliCommand {
         id: Option<String>,
     },
 
+    /// Start the web dashboard server.
+    ///
+    /// Examples:
+    ///   hermes web                       — start on default port 8787
+    ///   hermes web --port 9000           — start on port 9000
+    ///   hermes web --no-open             — don't open browser automatically
+    Web {
+        /// Host to bind to.
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        /// Port to listen on.
+        #[arg(long, default_value = "8787")]
+        port: u16,
+        /// Don't open the browser automatically.
+        #[arg(long)]
+        no_open: bool,
+    },
+
+    /// Start unified runtime (dashboard + platforms + cron).
+    Serve {
+        /// Host for dashboard bind address.
+        #[arg(long, default_value = "0.0.0.0")]
+        host: String,
+        /// Port for dashboard bind address.
+        #[arg(long, default_value = "3000")]
+        port: u16,
+        /// Disable dashboard subsystem.
+        #[arg(long)]
+        no_dashboard: bool,
+        /// Disable platform subsystem.
+        #[arg(long)]
+        no_platforms: bool,
+        /// Disable cron subsystem.
+        #[arg(long)]
+        no_cron: bool,
+    },
+
     /// Start an interactive chat session.
     Chat {
         /// Single-shot query (non-interactive).
