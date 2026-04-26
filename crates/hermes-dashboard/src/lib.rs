@@ -13,6 +13,7 @@ pub use security::PolicyGuardConfig;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use axum::extract::ws::{Message as WsMessage, WebSocket};
 use axum::extract::{Path, State, WebSocketUpgrade};
@@ -41,6 +42,7 @@ pub struct HttpServerState {
     pub session_persistence: Arc<hermes_agent::session_persistence::SessionPersistence>,
     pub cron_scheduler: Option<Arc<hermes_cron::CronScheduler>>,
     pub skill_store: Option<Arc<dyn hermes_skills::SkillStore>>,
+    pub runtime_gateway_running: Option<Arc<AtomicBool>>,
     agent_service: Arc<dyn hermes_core::traits::AgentService>,
 }
 
@@ -90,6 +92,7 @@ impl HttpServerState {
             session_persistence,
             cron_scheduler: Some(cron_scheduler),
             skill_store: Some(skill_store),
+            runtime_gateway_running: None,
             agent_service,
         })
     }
@@ -133,8 +136,14 @@ impl HttpServerState {
             session_persistence,
             cron_scheduler: Some(cron_scheduler),
             skill_store: Some(skill_store),
+            runtime_gateway_running: None,
             agent_service,
         })
+    }
+
+    pub fn with_runtime_gateway_running(mut self, runtime_gateway_running: Arc<AtomicBool>) -> Self {
+        self.runtime_gateway_running = Some(runtime_gateway_running);
+        self
     }
 }
 
@@ -203,7 +212,7 @@ pub fn router(state: HttpServerState) -> Router {
         .merge(dashboard::router())
         .with_state(state);
 
-    // Serve the web dashboard SPA from the `web/dist` directory if it exists.
+    // Serve the web dashboard SPA from the `apps/web/dist` directory if it exists.
     // Checks HERMES_WEB_DIST env var first, then common relative paths.
     let web_dist = std::env::var("HERMES_WEB_DIST")
         .ok()
@@ -211,9 +220,9 @@ pub fn router(state: HttpServerState) -> Router {
         .or_else(|| {
             // Try relative to the binary location
             let candidates = [
-                std::path::PathBuf::from("web/dist"),
-                std::path::PathBuf::from("../web/dist"),
-                std::path::PathBuf::from("../../web/dist"),
+                std::path::PathBuf::from("apps/web/dist"),
+                std::path::PathBuf::from("../apps/web/dist"),
+                std::path::PathBuf::from("../../apps/web/dist"),
             ];
             candidates.into_iter().find(|p| p.join("index.html").exists())
         });

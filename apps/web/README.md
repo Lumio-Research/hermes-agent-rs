@@ -16,7 +16,7 @@ cd ../
 python -m hermes_cli.main web --no-open
 
 # In another terminal, start the Vite dev server (with HMR + API proxy)
-cd web/
+cd apps/web/
 npm run dev
 ```
 

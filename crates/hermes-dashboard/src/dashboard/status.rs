@@ -4,6 +4,7 @@ use axum::extract::State;
 use axum::Json;
 use std::collections::HashMap;
 use std::fs;
+use std::sync::atomic::Ordering;
 
 use crate::HttpServerState;
 use super::types::StatusResponse;
@@ -15,21 +16,36 @@ pub async fn get_status(
     let config_path = state.hermes_home.join("config.yaml").display().to_string();
     let env_path = state.hermes_home.join(".env").display().to_string();
 
-    // Check if gateway is running via PID file
-    let pid_file_path = state.hermes_home.join("gateway.pid");
-    let (gateway_running, gateway_pid) = if pid_file_path.exists() {
-        if let Ok(pid_str) = fs::read_to_string(&pid_file_path) {
-            if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                // Check if process is alive (Unix-specific)
-                #[cfg(unix)]
-                let is_alive = unsafe { libc::kill(pid as i32, 0) == 0 };
-                #[cfg(not(unix))]
-                let is_alive = false; // On non-Unix, assume not running
-                
-                if is_alive {
-                    (true, Some(pid))
+    // Prefer runtime-backed gateway status when available.
+    let (gateway_running, gateway_pid) = if let Some(runtime_gateway_running) =
+        &state.runtime_gateway_running
+    {
+        let running = runtime_gateway_running.load(Ordering::Relaxed);
+        let pid = if running {
+            Some(std::process::id())
+        } else {
+            None
+        };
+        (running, pid)
+    } else {
+        // Backward-compatible fallback for standalone gateway process mode.
+        let pid_file_path = state.hermes_home.join("gateway.pid");
+        if pid_file_path.exists() {
+            if let Ok(pid_str) = fs::read_to_string(&pid_file_path) {
+                if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                    // Check if process is alive (Unix-specific)
+                    #[cfg(unix)]
+                    let is_alive = unsafe { libc::kill(pid as i32, 0) == 0 };
+                    #[cfg(not(unix))]
+                    let is_alive = false; // On non-Unix, assume not running
+
+                    if is_alive {
+                        (true, Some(pid))
+                    } else {
+                        (false, Some(pid))
+                    }
                 } else {
-                    (false, Some(pid))
+                    (false, None)
                 }
             } else {
                 (false, None)
@@ -37,8 +53,6 @@ pub async fn get_status(
         } else {
             (false, None)
         }
-    } else {
-        (false, None)
     };
 
     // Query active session count from SQLite directly

@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use hermes_agent::agent_builder::{bridge_tool_registry, build_provider};
 use hermes_agent::session_persistence::SessionPersistence;
@@ -92,6 +93,7 @@ impl RuntimeBuilder {
             tool_registry.clone(),
             session_persistence,
         ));
+        let runtime_gateway_running = Arc::new(AtomicBool::new(false));
         let (bus_client, bus_server) = InProcessTransport::new(512);
         sidecar_tasks.push(tokio::spawn(run_bus_agent_service_loop(
             local_agent_service.clone(),
@@ -106,7 +108,8 @@ impl RuntimeBuilder {
                 (*config).clone(),
                 agent_service.clone(),
             )
-            .await?;
+            .await?
+            .with_runtime_gateway_running(runtime_gateway_running.clone());
             dashboard_task = Some(tokio::spawn(async move {
                 hermes_dashboard::run_server_with_state(addr, dashboard_state).await
             }));
@@ -162,6 +165,7 @@ impl RuntimeBuilder {
             gw.start_all()
                 .await
                 .map_err(|e| AgentError::Gateway(e.to_string()))?;
+            runtime_gateway_running.store(true, Ordering::Relaxed);
             {
                 let gw_reconnect = gw.clone();
                 sidecar_tasks.push(tokio::spawn(async move {
@@ -229,6 +233,7 @@ impl RuntimeBuilder {
             gw.stop_all()
                 .await
                 .map_err(|e| AgentError::Gateway(e.to_string()))?;
+            runtime_gateway_running.store(false, Ordering::Relaxed);
         }
         for task in sidecar_tasks {
             task.abort();

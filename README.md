@@ -1,4 +1,4 @@
-<div align="center">
+
 
 # ⚡ Hermes Agent `v0.1`
 
@@ -10,7 +10,7 @@ Rust rewrite of [Hermes Agent](https://github.com/NousResearch/hermes-agent) by 
 
 **[English](./README.md)** · **[中文](./README_ZH.md)** · **[日本語](./README_JA.md)** · **[한국어](./README_KO.md)**
 
-</div>
+
 
 ---
 
@@ -44,6 +44,7 @@ That's it. You're in an interactive session with tool access, memory, and stream
 ## What Can It Do?
 
 **Chat with any LLM** — switch models mid-conversation:
+
 ```
 hermes
 > /model gpt-4o
@@ -51,16 +52,19 @@ hermes
 ```
 
 **One-shot tasks** from the command line:
+
 ```bash
 hermes chat --query "Refactor auth.rs to use the new error types"
 ```
 
 **Multi-platform gateway** — connect Telegram, Discord, Slack, and more simultaneously:
+
 ```bash
 hermes gateway start
 ```
 
 **Run anywhere** — Docker, SSH, or remote sandboxes:
+
 ```yaml
 # ~/.hermes/config.yaml
 terminal:
@@ -69,6 +73,7 @@ terminal:
 ```
 
 **MCP + ACP** — connect external tool servers or expose Hermes as one:
+
 ```yaml
 mcp:
   servers:
@@ -106,11 +111,13 @@ hermes-cli                    # Binary entry point, TUI, slash commands
 ## Install
 
 **One-liner** (auto-detects OS and CPU):
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Lumio-Research/hermes-agent-rs/main/scripts/install.sh | bash
 ```
 
 **From source:**
+
 ```bash
 cargo install --git https://github.com/Lumio-Research/hermes-agent-rs hermes-cli --locked
 ```
@@ -118,6 +125,7 @@ cargo install --git https://github.com/Lumio-Research/hermes-agent-rs hermes-cli
 **Manual download:** grab the binary for your platform from [Releases](https://github.com/Lumio-Research/hermes-agent-rs/releases).
 
 **Docker:**
+
 ```bash
 docker run --rm -it -v ~/.hermes:/root/.hermes ghcr.io/lumio-research/hermes-agent-rs
 ```

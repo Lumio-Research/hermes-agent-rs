@@ -21,7 +21,7 @@ members = [
     "crates/hermes-parity-tests",
     "crates/hermes-bus",
     "crates/hermes-runtime",
-    "crates/hermes-app/src-tauri",
+    "apps/desktop/src-tauri",
 ]
 
 [workspace.package]

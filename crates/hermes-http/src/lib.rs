@@ -390,7 +390,7 @@ pub fn router(state: HttpServerState) -> Router {
         .merge(dashboard::router())
         .with_state(state);
 
-    // Serve the web dashboard SPA from the `web/dist` directory if it exists.
+    // Serve the web dashboard SPA from the `apps/web/dist` directory if it exists.
     // Checks HERMES_WEB_DIST env var first, then common relative paths.
     let web_dist = std::env::var("HERMES_WEB_DIST")
         .ok()
@@ -398,9 +398,9 @@ pub fn router(state: HttpServerState) -> Router {
         .or_else(|| {
             // Try relative to the binary location
             let candidates = [
-                std::path::PathBuf::from("web/dist"),
-                std::path::PathBuf::from("../web/dist"),
-                std::path::PathBuf::from("../../web/dist"),
+                std::path::PathBuf::from("apps/web/dist"),
+                std::path::PathBuf::from("../apps/web/dist"),
+                std::path::PathBuf::from("../../apps/web/dist"),
             ];
             candidates.into_iter().find(|p| p.join("index.html").exists())
         });
