@@ -193,7 +193,34 @@ impl RuntimeBuilder {
                 ..RuntimeGatewayConfig::default()
             };
             let session_manager = Arc::new(SessionManager::new(config.session.clone()));
-            let dm_manager = DmManager::with_pair_behavior();
+
+            // Collect allowed_users / admin_users from all platform configs
+            // and feed them into the DmManager so the gateway's auth gate
+            // actually recognises users listed in config.yaml.
+            let mut authorized_users = std::collections::HashSet::new();
+            let mut admin_users = std::collections::HashSet::new();
+            let mut any_pair = false;
+            for (_name, plat_cfg) in &config.platforms {
+                for u in &plat_cfg.allowed_users {
+                    authorized_users.insert(u.clone());
+                }
+                for u in &plat_cfg.admin_users {
+                    admin_users.insert(u.clone());
+                }
+                if plat_cfg.unauthorized_dm_behavior == hermes_config::UnauthorizedDmBehavior::Pair {
+                    any_pair = true;
+                }
+            }
+            let unauthorized_behavior = if any_pair {
+                hermes_config::UnauthorizedDmBehavior::Pair
+            } else {
+                hermes_config::UnauthorizedDmBehavior::Ignore
+            };
+            let dm_manager = DmManager::new(
+                authorized_users,
+                admin_users,
+                unauthorized_behavior,
+            );
             let gw = Arc::new(Gateway::new(
                 session_manager,
                 dm_manager,

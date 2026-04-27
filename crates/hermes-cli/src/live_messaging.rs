@@ -500,17 +500,30 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
 
     if let Some(platform_cfg) = config.platforms.get("weixin") {
         if platform_cfg.enabled && !fatal_platforms.contains("weixin") {
-            let account_id = extra_string(platform_cfg, "account_id").unwrap_or_default();
-            let token = platform_token_or_extra(platform_cfg).unwrap_or_default();
-            if !account_id.is_empty() && !token.is_empty() {
-                let cfg = WeixinConfig::from_platform_config(platform_cfg);
-                match WeChatAdapter::new(cfg) {
-                    Ok(adapter) => {
-                        gateway.register_adapter("weixin", Arc::new(adapter)).await;
-                        registered.push("weixin".to_string());
-                    }
-                    Err(e) => tracing::warn!("weixin adapter init failed: {}", e),
+            let cfg = WeixinConfig::from_platform_config(platform_cfg);
+            match WeChatAdapter::new(cfg) {
+                Ok(adapter) => {
+                    let adapter = Arc::new(adapter);
+                    let (inbound_tx, mut inbound_rx) =
+                        tokio::sync::mpsc::channel::<hermes_gateway::gateway::IncomingMessage>(256);
+                    adapter.set_inbound_sender(inbound_tx).await;
+                    let gw_clone = gateway.clone();
+                    tokio::spawn(async move {
+                        while let Some(msg) = inbound_rx.recv().await {
+                            if let Err(e) = gw_clone.route_message(&msg).await {
+                                tracing::warn!(
+                                    platform = %msg.platform,
+                                    chat_id = %msg.chat_id,
+                                    error = %e,
+                                    "weixin inbound routing failed"
+                                );
+                            }
+                        }
+                    });
+                    gateway.register_adapter("weixin", adapter).await;
+                    registered.push("weixin".to_string());
                 }
+                Err(e) => tracing::warn!("weixin adapter init failed: {}", e),
             }
         }
     }
