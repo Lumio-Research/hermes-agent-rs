@@ -49,7 +49,7 @@ pub struct RegistrationSummary {
 /// This function registers all enabled platform adapters from the configuration
 /// into the gateway. It supports all 17 platform adapters + ApiServer + Webhook.
 pub async fn register_platforms(
-    gateway: &Gateway,
+    gateway: &Arc<Gateway>,
     config: &GatewayConfig,
     sidecar_tasks: &mut Vec<tokio::task::JoinHandle<()>>,
 ) -> Result<RegistrationSummary, AgentError> {
@@ -179,7 +179,12 @@ pub async fn register_platforms(
                     let wx_cfg = WeixinConfig::from_platform_config(platform_cfg);
                     match WeChatAdapter::new(wx_cfg) {
                         Ok(adapter) => {
-                            gateway.register_adapter("weixin", Arc::new(adapter)).await;
+                            let adapter = Arc::new(adapter);
+                            let (inbound_tx, inbound_rx) =
+                                tokio::sync::mpsc::channel::<crate::gateway::IncomingMessage>(256);
+                            adapter.set_inbound_sender(inbound_tx).await;
+                            gateway
+                                .register_adapter_with_inbound("weixin", adapter.clone(), inbound_rx);
                             registered.push("weixin".to_string());
                         }
                         Err(e) => errors.push(("weixin".to_string(), e.to_string())),

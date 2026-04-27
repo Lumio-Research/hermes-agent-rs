@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
 use hermes_core::errors::GatewayError;
@@ -194,13 +194,30 @@ struct SessionRuntimeState {
 // Gateway
 // ---------------------------------------------------------------------------
 
+/// Background task that reads inbound messages from `rx` and routes them
+/// through the gateway's full pipeline (DM check → session → agent → reply).
+async fn gw_pump_inbound(gateway: Arc<Gateway>, mut rx: mpsc::Receiver<IncomingMessage>) {
+    while let Some(msg) = rx.recv().await {
+        if let Err(e) = gateway.route_message(&msg).await {
+            warn!(
+                platform = %msg.platform,
+                chat_id = %msg.chat_id,
+                user_id = %msg.user_id,
+                error = %e,
+                "inbound message routing failed"
+            );
+        }
+    }
+    debug!("inbound pump exited");
+}
+
 /// Central orchestrator for all platform adapters.
 ///
 /// The `Gateway` owns a collection of named `PlatformAdapter` instances,
 /// a `SessionManager`, a `DmManager`, and a `StreamManager`. It provides
 /// a unified interface to start/stop adapters and route messages.
 pub struct Gateway {
-    adapters: RwLock<HashMap<String, Arc<dyn PlatformAdapter>>>,
+    adapters: Arc<RwLock<HashMap<String, Arc<dyn PlatformAdapter>>>>,
     session_manager: Arc<SessionManager>,
     dm_manager: Arc<RwLock<DmManager>>,
     stream_manager: Arc<StreamManager>,
@@ -235,7 +252,7 @@ impl Gateway {
         let stream_manager = Arc::new(StreamManager::new(config.streaming.clone()));
 
         Self {
-            adapters: RwLock::new(HashMap::new()),
+            adapters: Arc::new(RwLock::new(HashMap::new())),
             session_manager,
             dm_manager: Arc::new(RwLock::new(dm_manager)),
             stream_manager,
@@ -346,6 +363,31 @@ impl Gateway {
         let name = name.into();
         info!("Registering platform adapter: {}", name);
         self.adapters.write().await.insert(name, adapter);
+    }
+
+    /// Register a platform adapter and spawn a background task that reads
+    /// inbound messages from `rx` and routes them through [`Self::route_message`].
+    ///
+    /// Polling-based adapters (weixin, dingtalk, webhook) produce inbound
+    /// messages on an `mpsc::Sender`.  Pass the corresponding `Receiver` here
+    /// so the gateway can deliver them to the agent loop.
+    ///
+    /// Requires `Arc<Self>` because the spawned pump task must hold a strong
+    /// reference to the gateway.
+    pub fn register_adapter_with_inbound(
+        self: &Arc<Self>,
+        name: impl Into<String>,
+        adapter: Arc<dyn PlatformAdapter>,
+        rx: mpsc::Receiver<IncomingMessage>,
+    ) -> tokio::task::JoinHandle<()> {
+        let name = name.into();
+        info!("Registering platform adapter (inbound): {}", name);
+        let gw = self.clone();
+        let adapters = self.adapters.clone();
+        tokio::spawn(async move {
+            adapters.write().await.insert(name, adapter);
+            gw_pump_inbound(gw, rx).await;
+        })
     }
 
     /// Retrieve a registered platform adapter by name.
