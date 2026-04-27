@@ -486,14 +486,18 @@ impl Gateway {
         session_key: &str,
     ) -> Result<bool, GatewayError> {
         let result = handle_command(&incoming.text);
-        if !matches!(result, GatewayCommandResult::Unknown(_)) {
-            if let Some(command_name) = Self::extract_command_name(&incoming.text) {
-                self.emit_hook_event(
-                    &format!("command:{}", command_name),
-                    hook_payloads::command_context(incoming, session_key, command_name.as_str()),
-                )
-                .await;
-            }
+        if let Some(command_name) = Self::extract_command_name(&incoming.text) {
+            let line = incoming.text.trim();
+            self.emit_hook_event(
+                &format!("command:{}", command_name),
+                hook_payloads::command_context(
+                    incoming,
+                    session_key,
+                    command_name.as_str(),
+                    line,
+                ),
+            )
+            .await;
         }
         let handled = self
             .apply_command_result(incoming, session_key, result)
@@ -2662,6 +2666,51 @@ mod tests {
         let names: Vec<String> = events.iter().map(|(name, _)| name.clone()).collect();
         assert!(names.contains(&"session:start".to_string()));
         assert!(names.contains(&"command:status".to_string()));
+    }
+
+    #[tokio::test]
+    async fn gateway_emits_command_hook_for_unknown_slash() {
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let adapter = Arc::new(TestAdapter {
+            messages: sent.clone(),
+        });
+        let hook_seen = Arc::new(Mutex::new(Vec::new()));
+        let mut hooks = HookRegistry::new();
+        hooks.register_in_process(
+            "command:*",
+            Arc::new(RecordingHook {
+                seen: hook_seen.clone(),
+            }),
+        );
+
+        let session_mgr = Arc::new(SessionManager::new(SessionConfig::default()));
+        let mut dm_manager = DmManager::with_pair_behavior();
+        dm_manager.authorize_user("user1");
+        let gw = Gateway::new(session_mgr, dm_manager, GatewayConfig::default());
+        gw.set_hook_registry(Arc::new(hooks)).await;
+        gw.register_adapter("test", adapter).await;
+
+        let incoming = IncomingMessage {
+            platform: "test".into(),
+            chat_id: "chat1".into(),
+            user_id: "user1".into(),
+            text: "  /nosuchplugincmd_xyz arg  ".into(),
+            message_id: None,
+            is_dm: true,
+        };
+        assert!(gw.route_message(&incoming).await.is_ok());
+
+        let events = hook_seen.lock().unwrap();
+        let cmd_events: Vec<_> = events
+            .iter()
+            .filter(|(n, _)| n.starts_with("command:"))
+            .collect();
+        assert_eq!(cmd_events.len(), 1);
+        assert_eq!(cmd_events[0].0, "command:nosuchplugincmd_xyz");
+        assert_eq!(
+            cmd_events[0].1.get("text").and_then(|v| v.as_str()),
+            Some("/nosuchplugincmd_xyz arg")
+        );
     }
 
     #[tokio::test]

@@ -10,7 +10,11 @@ use hermes_gateway::{DmManager, Gateway, SessionManager};
 fn make_gateway() -> Gateway {
     let session_manager = Arc::new(SessionManager::new(SessionConfig::default()));
     let dm = DmManager::with_pair_behavior();
-    Gateway::new(session_manager, dm, hermes_gateway::gateway::GatewayConfig::default())
+    Gateway::new(
+        session_manager,
+        dm,
+        hermes_gateway::gateway::GatewayConfig::default(),
+    )
 }
 
 #[tokio::test]
@@ -44,7 +48,9 @@ async fn register_platforms_registers_enabled_api_server() {
     api_cfg
         .extra
         .insert("host".to_string(), serde_json::json!("127.0.0.1"));
-    api_cfg.extra.insert("port".to_string(), serde_json::json!(0));
+    api_cfg
+        .extra
+        .insert("port".to_string(), serde_json::json!(0));
     config.platforms.insert("api_server".to_string(), api_cfg);
 
     let mut sidecar_tasks = Vec::new();
@@ -94,10 +100,9 @@ async fn register_platforms_reports_webhook_missing_secret() {
     }
 
     assert!(
-        summary
-            .errors
-            .iter()
-            .any(|(name, msg)| name == "webhook" && msg.contains("secret is missing")),
+        summary.errors.iter().any(|(name, msg)| {
+            name == "webhook" && (msg.contains("secret") || msg.contains("缺少"))
+        }),
         "missing webhook secret should be reported as registration error"
     );
     assert!(

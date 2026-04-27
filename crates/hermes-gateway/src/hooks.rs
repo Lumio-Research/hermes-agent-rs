@@ -17,7 +17,8 @@
 //! - `agent:start`       — Agent begins processing a message
 //! - `agent:step`        — Each tool-calling loop iteration
 //! - `agent:end`         — Agent finishes processing
-//! - `command:*`         — Any slash command (wildcard match)
+//! - `command:*`         — Any slash command (wildcard match), including
+//!                         unknown commands that still receive a reply
 //!
 //! ## Wildcard matching
 //!

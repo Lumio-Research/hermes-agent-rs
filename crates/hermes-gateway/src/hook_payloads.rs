@@ -67,14 +67,20 @@ pub fn session_lifecycle_from_incoming(incoming: &IncomingMessage, session_id: &
     )
 }
 
-/// `command:<name>`
-pub fn command_context(incoming: &IncomingMessage, session_id: &str, command_name: &str) -> Value {
+/// `command:<name>` — `text` is the full user slash line (trimmed), for Python parity.
+pub fn command_context(
+    incoming: &IncomingMessage,
+    session_id: &str,
+    command_name: &str,
+    command_line: &str,
+) -> Value {
     json!({
         "platform": incoming.platform,
         "chat_id": incoming.chat_id,
         "user_id": incoming.user_id,
         "session_id": session_id,
         "command": command_name,
+        "text": command_line,
     })
 }
 
@@ -281,10 +287,17 @@ mod tests {
             message_id: None,
             is_dm: false,
         };
-        let v = command_context(&incoming, "sk", "status");
+        let v = command_context(&incoming, "sk", "status", "/status");
         assert_eq!(
             object_keys(&v),
-            vec!["chat_id", "command", "platform", "session_id", "user_id"]
+            vec![
+                "chat_id",
+                "command",
+                "platform",
+                "session_id",
+                "text",
+                "user_id"
+            ]
         );
     }
 }

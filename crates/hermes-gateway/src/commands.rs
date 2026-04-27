@@ -2,6 +2,13 @@
 //!
 //! Processes user-issued slash commands from messaging platforms
 //! (Telegram, Discord, Slack, etc.) and returns responses or actions.
+//!
+//! In-process extensions (Python `register_command` parity) register via
+//! [`register_slash_command_extension`]; each handler returns `None` if it
+//! does not own the command. Extensions run **before** built-ins so custom
+//! commands can be handled without forking core routing.
+
+use std::sync::{Arc, OnceLock, RwLock};
 
 /// Result of processing a gateway slash command.
 #[derive(Debug, Clone)]
@@ -84,6 +91,53 @@ pub struct CommandInfo {
     pub aliases: &'static [&'static str],
     pub description: &'static str,
     pub usage: &'static str,
+}
+
+/// Help line for a dynamically registered slash command (owned strings).
+#[derive(Debug, Clone)]
+pub struct ExtensionCommandInfo {
+    pub usage: String,
+    pub description: String,
+}
+
+/// Extend gateway slash routing (mirrors Python plugin `register_command`).
+pub trait SlashCommandExtension: Send + Sync {
+    /// Return [`Some`]`(result)` when this extension handles `cmd` (lowercased token, e.g. `"/foo"`).
+    fn try_dispatch(&self, cmd: &str, args: &str) -> Option<GatewayCommandResult>;
+
+    /// Optional extra rows appended after built-in [`all_commands`] in `/help`.
+    fn extension_help_entries(&self) -> Vec<ExtensionCommandInfo> {
+        vec![]
+    }
+}
+
+static SLASH_EXTENSIONS: OnceLock<RwLock<Vec<Arc<dyn SlashCommandExtension>>>> = OnceLock::new();
+
+fn slash_extensions() -> &'static RwLock<Vec<Arc<dyn SlashCommandExtension>>> {
+    SLASH_EXTENSIONS.get_or_init(|| RwLock::new(Vec::new()))
+}
+
+/// Register an in-process slash command handler (process-wide, idempotent-safe to call at startup).
+pub fn register_slash_command_extension(ext: Arc<dyn SlashCommandExtension>) {
+    slash_extensions().write().expect("slash extensions poisoned").push(ext);
+}
+
+fn build_help_text() -> String {
+    let mut help = String::from("📖 **Available Commands:**\n\n");
+    for cmd_info in all_commands() {
+        help.push_str(&format!(
+            "  `{}` — {}\n",
+            cmd_info.usage, cmd_info.description
+        ));
+    }
+    if let Some(lock) = SLASH_EXTENSIONS.get() {
+        for ext in lock.read().expect("slash extensions poisoned").iter() {
+            for e in ext.extension_help_entries() {
+                help.push_str(&format!("  `{}` — {}\n", e.usage, e.description));
+            }
+        }
+    }
+    help
 }
 
 /// All registered gateway slash commands.
@@ -283,7 +337,19 @@ pub fn handle_command(input: &str) -> GatewayCommandResult {
     let cmd = parts[0].to_lowercase();
     let args = parts.get(1).map(|s| s.trim()).unwrap_or("");
 
-    match cmd.as_str() {
+    if let Some(lock) = SLASH_EXTENSIONS.get() {
+        for ext in lock.read().expect("slash extensions poisoned").iter() {
+            if let Some(res) = ext.try_dispatch(cmd.as_str(), args) {
+                return res;
+            }
+        }
+    }
+
+    dispatch_builtin_command(cmd.as_str(), args)
+}
+
+fn dispatch_builtin_command(cmd: &str, args: &str) -> GatewayCommandResult {
+    match cmd {
         "/new" => GatewayCommandResult::ResetSession("🆕 New conversation started.".to_string()),
         "/reset" | "/clear" => GatewayCommandResult::ResetSession("🔄 Session reset.".to_string()),
         "/model" => {
@@ -472,16 +538,7 @@ pub fn handle_command(input: &str) -> GatewayCommandResult {
         "/insights" => GatewayCommandResult::ShowInsights(
             "📌 Conversation insights will be shown here.".to_string(),
         ),
-        "/help" | "/commands" => {
-            let mut help = String::from("📖 **Available Commands:**\n\n");
-            for cmd_info in all_commands() {
-                help.push_str(&format!(
-                    "  `{}` — {}\n",
-                    cmd_info.usage, cmd_info.description
-                ));
-            }
-            GatewayCommandResult::ShowHelp(help)
-        }
+        "/help" | "/commands" => GatewayCommandResult::ShowHelp(build_help_text()),
         _ => GatewayCommandResult::Unknown(format!(
             "Unknown command: {}. Type /help for available commands.",
             cmd
@@ -492,6 +549,48 @@ pub fn handle_command(input: &str) -> GatewayCommandResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static SLASH_EXT_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn slash_extension_dispatches_before_builtin_and_merges_help() {
+        let _g = SLASH_EXT_TEST_LOCK.lock().expect("slash ext test lock poisoned");
+        struct E;
+        impl SlashCommandExtension for E {
+            fn try_dispatch(&self, cmd: &str, args: &str) -> Option<GatewayCommandResult> {
+                if cmd == "/__hermes_ext_ping__" {
+                    Some(GatewayCommandResult::Reply(format!("pong:{args}")))
+                } else {
+                    None
+                }
+            }
+
+            fn extension_help_entries(&self) -> Vec<ExtensionCommandInfo> {
+                vec![ExtensionCommandInfo {
+                    usage: "/__hermes_ext_ping__".into(),
+                    description: "test extension".into(),
+                }]
+            }
+        }
+        register_slash_command_extension(Arc::new(E));
+
+        match handle_command("/__hermes_ext_ping__ hi") {
+            GatewayCommandResult::Reply(s) => assert_eq!(s, "pong:hi"),
+            other => panic!("expected Reply, got {:?}", other),
+        }
+        match handle_command("/new") {
+            GatewayCommandResult::ResetSession(_) => {}
+            other => panic!("expected builtin ResetSession, got {:?}", other),
+        }
+        match handle_command("/help") {
+            GatewayCommandResult::ShowHelp(h) => {
+                assert!(h.contains("/__hermes_ext_ping__"));
+                assert!(h.contains("test extension"));
+            }
+            other => panic!("expected ShowHelp, got {:?}", other),
+        }
+    }
 
     #[test]
     fn test_new_command() {

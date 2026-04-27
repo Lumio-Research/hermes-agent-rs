@@ -10,7 +10,11 @@ use proptest::prelude::*;
 fn make_gateway() -> Gateway {
     let session_manager = Arc::new(SessionManager::new(SessionConfig::default()));
     let dm = DmManager::with_pair_behavior();
-    Gateway::new(session_manager, dm, hermes_gateway::gateway::GatewayConfig::default())
+    Gateway::new(
+        session_manager,
+        dm,
+        hermes_gateway::gateway::GatewayConfig::default(),
+    )
 }
 
 #[allow(unused_variables, unused_mut)]

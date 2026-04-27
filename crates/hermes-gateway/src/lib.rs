@@ -26,6 +26,7 @@ pub mod delivery;
 pub mod dm;
 pub mod format;
 pub mod gateway;
+pub mod gateway_requirements;
 pub mod hook_payloads;
 pub mod hooks;
 pub mod markdown_split;
@@ -33,6 +34,7 @@ pub mod media;
 pub mod mirror;
 pub mod pairing;
 pub mod platform_registry;
+pub mod platform_requirements;
 pub mod platforms;
 pub mod session;
 pub mod ssrf;
@@ -50,10 +52,20 @@ pub use hermes_core::types::Message;
 pub use gateway::{Gateway, GatewayRuntimeContext};
 
 // Re-export platform registry
+pub use gateway_requirements::gateway_requirement_issues;
 pub use platform_registry::{register_platforms, RegistrationSummary};
+pub use platform_requirements::{
+    evaluate_gateway_requirements, RequirementIssue, RequirementScope, RequirementSeverity,
+};
 
 // Re-export session management
 pub use session::{Session, SessionManager};
+
+// Slash commands (built-in + [`register_slash_command_extension`])
+pub use commands::{
+    all_commands, handle_command, register_slash_command_extension, ExtensionCommandInfo,
+    SlashCommandExtension,
+};
 
 // Re-export stream management
 pub use stream::{StreamHandle, StreamManager};
