@@ -237,14 +237,8 @@ pub trait AgentService: Send + Sync {
     ) -> Result<AgentReply, AgentError>;
 
     /// Get all messages for a session.
-    async fn get_session_messages(
-        &self,
-        session_id: &str,
-    ) -> Result<Vec<Message>, AgentError>;
+    async fn get_session_messages(&self, session_id: &str) -> Result<Vec<Message>, AgentError>;
 
     /// Clear a session's message history.
-    async fn reset_session(
-        &self,
-        session_id: &str,
-    ) -> Result<(), AgentError>;
+    async fn reset_session(&self, session_id: &str) -> Result<(), AgentError>;
 }

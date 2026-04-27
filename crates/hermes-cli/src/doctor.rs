@@ -5,6 +5,7 @@ use std::process::Command;
 
 use hermes_config::{hermes_home, load_config};
 use hermes_core::AgentError;
+use hermes_gateway::{evaluate_gateway_requirements, RequirementScope, RequirementSeverity};
 
 /// A single check result.
 pub struct CheckResult {
@@ -86,6 +87,8 @@ pub fn run_doctor() -> Vec<CheckResult> {
     // Config file
     check_config(&home, &mut results);
 
+    check_gateway_platform_requirements(&mut results);
+
     // API keys
     check_api_keys(&mut results);
 
@@ -118,6 +121,27 @@ pub fn run_doctor() -> Vec<CheckResult> {
     }
 
     results
+}
+
+/// Enabled gateway platforms: credential preflight via `hermes-gateway` evaluator.
+fn check_gateway_platform_requirements(results: &mut Vec<CheckResult>) {
+    match load_config(None) {
+        Ok(cfg) => {
+            for issue in evaluate_gateway_requirements(&cfg, RequirementScope::Doctor) {
+                let name = format!("Gateway / {}", issue.platform);
+                let detail = format!("[{}] {}", issue.code, issue.message);
+                match issue.severity {
+                    RequirementSeverity::Fatal => {
+                        results.push(CheckResult::fail(name, detail));
+                    }
+                    RequirementSeverity::Warn => {
+                        results.push(CheckResult::warn(name, detail));
+                    }
+                }
+            }
+        }
+        Err(_) => {}
+    }
 }
 
 fn check_config(home: &Path, results: &mut Vec<CheckResult>) {

@@ -43,6 +43,10 @@ pub const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("/compress", "Trigger context compression"),
     ("/usage", "Show token usage statistics"),
     ("/stop", "Stop current agent execution"),
+    (
+        "/steer",
+        "Mid-run guidance — appended to the next tool result (usage: /steer <prompt>)",
+    ),
     ("/status", "Show session status (model, turns, token count)"),
     ("/save", "Save current session to disk"),
     ("/load", "Load a saved session"),
@@ -122,6 +126,7 @@ pub async fn handle_slash_command(
         "/compress" => handle_compress_command(app),
         "/usage" => handle_usage_command(app),
         "/stop" => handle_stop_command(app),
+        "/steer" => handle_steer_command(app, args),
         "/status" => handle_status_command(app),
         "/save" => handle_save_command(app, args),
         "/load" => handle_load_command(app, args),
@@ -346,6 +351,21 @@ fn handle_stop_command(app: &mut App) -> Result<CommandResult, AgentError> {
     app.interrupt_controller.interrupt(None);
     println!("[Stopping current agent execution]");
     println!("Agent execution halted. You can continue typing or use /retry.");
+    Ok(CommandResult::Handled)
+}
+
+fn handle_steer_command(app: &mut App, args: &[&str]) -> Result<CommandResult, AgentError> {
+    let text = args.join(" ");
+    if text.trim().is_empty() {
+        println!("Usage: /steer <prompt>");
+        return Ok(CommandResult::Handled);
+    }
+
+    if app.agent.steer(&text) {
+        println!("[Steer queued — will be injected into the next tool result]");
+    } else {
+        println!("[Steer ignored — empty/whitespace-only prompt]");
+    }
     Ok(CommandResult::Handled)
 }
 

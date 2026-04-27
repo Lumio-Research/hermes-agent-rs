@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use hermes_core::traits::{AgentOverrides, AgentReply, AgentService};
@@ -57,9 +57,7 @@ impl AgentService for RemoteAgentService {
                 .await
                 .map_err(Self::bus_to_agent_error)?
             {
-                BusMessage::AgentResponse(resp)
-                    if resp.request_id == request_id && resp.done =>
-                {
+                BusMessage::AgentResponse(resp) if resp.request_id == request_id && resp.done => {
                     if let Some(err) = resp.error {
                         return Err(AgentError::Io(err));
                     }
@@ -106,9 +104,7 @@ impl AgentService for RemoteAgentService {
                 BusMessage::AgentStreamChunk(ev) if ev.request_id == request_id => {
                     on_chunk(ev.chunk);
                 }
-                BusMessage::AgentResponse(resp)
-                    if resp.request_id == request_id && resp.done =>
-                {
+                BusMessage::AgentResponse(resp) if resp.request_id == request_id && resp.done => {
                     if let Some(err) = resp.error {
                         return Err(AgentError::Io(err));
                     }

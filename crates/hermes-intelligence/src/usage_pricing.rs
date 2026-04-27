@@ -233,10 +233,42 @@ fn official_pricing_db() -> HashMap<(&'static str, &'static str), PricingEntry> 
         None,
         None,
     );
-    add(&mut db, "deepseek", "deepseek-v4-flash", 0.14, 0.28, None, None);
-    add(&mut db, "deepseek", "deepseek-v4-pro", 1.74, 3.48, None, None);
-    add(&mut db, "deepseek", "deepseek-v4-flash", 0.14, 0.28, Some(0.028), None);
-    add(&mut db, "deepseek", "deepseek-v4-pro", 1.74, 3.48, Some(0.145), None);
+    add(
+        &mut db,
+        "deepseek",
+        "deepseek-v4-flash",
+        0.14,
+        0.28,
+        None,
+        None,
+    );
+    add(
+        &mut db,
+        "deepseek",
+        "deepseek-v4-pro",
+        1.74,
+        3.48,
+        None,
+        None,
+    );
+    add(
+        &mut db,
+        "deepseek",
+        "deepseek-v4-flash",
+        0.14,
+        0.28,
+        Some(0.028),
+        None,
+    );
+    add(
+        &mut db,
+        "deepseek",
+        "deepseek-v4-pro",
+        1.74,
+        3.48,
+        Some(0.145),
+        None,
+    );
 
     db
 }

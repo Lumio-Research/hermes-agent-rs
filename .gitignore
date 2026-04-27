@@ -12,4 +12,11 @@ vout-endianness-analysis.md
 dist
 .hermes/
 .playwright-mcp/
-.vscode/
+# 团队默认可提交 `.vscode/settings.json`；其余仍忽略
+.vscode/*
+!.vscode/settings.json
+
+
+deploy
+.kiro
+.vscode

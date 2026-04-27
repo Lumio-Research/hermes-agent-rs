@@ -21,6 +21,10 @@ cargo test -p hermes-parity-tests
 
 Recursive run over all non-`pending` JSON: `hermes_parity_tests::run_all_active_fixtures`.
 
+**Machine run / skip counts:** [`../PARITY_FIXTURE_STATUS.md`](../PARITY_FIXTURE_STATUS.md) (refresh per footer there before committing).
+
+Rust 侧 **模块 C**（Bedrock / 插件 / Dashboard）进度与缺口说明见 [`deploy/PARITY_MODULE_C.md`](../../../deploy/PARITY_MODULE_C.md)。
+
 ## Recording (Python)
 
 ```bash

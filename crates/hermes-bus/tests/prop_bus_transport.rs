@@ -1,6 +1,6 @@
-use hermes_bus::{BusMessage, InProcessTransport};
 use hermes_bus::messages::{AgentRequest, StatusQuery};
 use hermes_bus::transport::BusTransport;
+use hermes_bus::{BusMessage, InProcessTransport};
 use hermes_core::traits::AgentOverrides;
 use proptest::prelude::*;
 

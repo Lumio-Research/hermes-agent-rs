@@ -3,6 +3,7 @@ pub fn known_providers() -> Vec<&'static str> {
         "openai",
         "anthropic",
         "openrouter",
+        "deepseek",
         "codex",
         "openai-codex",
         "qwen",

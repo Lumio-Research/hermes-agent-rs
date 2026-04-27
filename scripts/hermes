@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# 优先直接跑已编译的 CLI，避免每次 `cargo run` 与 rust-analyzer 抢 target 锁。
+# 需要强制走 cargo 时：HERMES_USE_CARGO=1 scripts/hermes …
+set -eu
+ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+BIN="$ROOT/target/debug/hermes"
+if [ "${HERMES_USE_CARGO:-}" != 1 ] && [ -x "$BIN" ]; then
+  exec "$BIN" "$@"
+fi
+exec cargo run --manifest-path "$ROOT/Cargo.toml" -p hermes-cli -- "$@"

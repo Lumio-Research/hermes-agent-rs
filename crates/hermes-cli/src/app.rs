@@ -271,6 +271,7 @@ impl App {
         self.messages.clear();
         self.input_history.clear();
         self.history_index = 0;
+        self.agent.clear_pending_steer();
     }
 
     /// Reset the current session (clear messages but keep session ID).
@@ -278,6 +279,7 @@ impl App {
         self.messages.clear();
         self.input_history.clear();
         self.history_index = 0;
+        self.agent.clear_pending_steer();
     }
 
     /// Retry the last user message by re-sending it to the agent.
@@ -378,6 +380,7 @@ impl App {
             }
             Err(AgentError::Interrupted { message }) => {
                 self.interrupt_controller.clear_interrupt();
+                self.agent.clear_pending_steer();
                 if let Some(handle) = &self.stream_handle {
                     handle.send_done();
                 }

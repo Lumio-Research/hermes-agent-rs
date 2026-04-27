@@ -123,12 +123,61 @@ impl PlatformConfig {
 }
 
 // ---------------------------------------------------------------------------
+// Shared parsing helpers (`extra` map + token; Python / YAML–compatible)
+// ---------------------------------------------------------------------------
+
+/// `extra[key]` as a trimmed, non-empty string when the value is a JSON string.
+pub fn extra_string(cfg: &PlatformConfig, key: &str) -> Option<String> {
+    cfg.extra
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+}
+
+/// Bot token from [`PlatformConfig::token`] or `extra["token"]`, trimmed.
+pub fn platform_token_or_extra(cfg: &PlatformConfig) -> Option<String> {
+    cfg.token
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .or_else(|| extra_string(cfg, "token"))
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn extra_string_trims_and_skips_empty() {
+        let mut pc = PlatformConfig::default();
+        pc.extra.insert("k".to_string(), json!("  hi  "));
+        assert_eq!(extra_string(&pc, "k").as_deref(), Some("hi"));
+        pc.extra.insert("empty".to_string(), json!("   "));
+        assert!(extra_string(&pc, "empty").is_none());
+    }
+
+    #[test]
+    fn platform_token_or_extra_prefers_top_level_token() {
+        let mut pc = PlatformConfig::default();
+        pc.token = Some("  top  ".to_string());
+        pc.extra.insert("token".to_string(), json!("extra"));
+        assert_eq!(platform_token_or_extra(&pc).as_deref(), Some("top"));
+    }
+
+    #[test]
+    fn platform_token_or_extra_falls_back_to_extra() {
+        let mut pc = PlatformConfig::default();
+        pc.extra.insert("token".to_string(), json!("  from_extra "));
+        assert_eq!(platform_token_or_extra(&pc).as_deref(), Some("from_extra"));
+    }
 
     #[test]
     fn platform_config_default() {

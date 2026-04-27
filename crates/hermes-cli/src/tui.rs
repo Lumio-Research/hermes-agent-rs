@@ -1131,6 +1131,10 @@ mod tests {
         state.input = "/mod".to_string();
         state.update_completions();
         assert!(state.completions.contains(&"/model".to_string()));
+
+        state.input = "/st".to_string();
+        state.update_completions();
+        assert!(state.completions.contains(&"/steer".to_string()));
     }
 
     #[test]

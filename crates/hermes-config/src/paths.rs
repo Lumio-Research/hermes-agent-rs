@@ -9,28 +9,25 @@ use std::path::{Path, PathBuf};
 /// Return the hermes home directory.
 ///
 /// - If the `HERMES_HOME` environment variable is set, use that.
-/// - Otherwise default to `~/.hermes`.
+/// - Otherwise default to `~/.hermes` (i.e. [`user_home_dir`]`/.hermes`).
+///
+/// We intentionally do **not** use macOS `Library/Application Support/…`
+/// here so CLI, gateway, dashboard, and docs all agree on one layout.
 pub fn hermes_home() -> PathBuf {
     if let Ok(home) = std::env::var("HERMES_HOME") {
         PathBuf::from(home)
     } else {
-        dirs_home().join(".hermes")
+        user_home_dir().join(".hermes")
     }
 }
 
-/// Best-effort home directory resolution.
-fn dirs_home() -> PathBuf {
-    // Try the `directories` crate first; fall back to $HOME / $USERPROFILE.
-    if let Some(dirs) = directories::ProjectDirs::from("", "", "hermes") {
-        dirs.config_dir().to_path_buf()
-    } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home)
-    } else if let Ok(home) = std::env::var("USERPROFILE") {
-        PathBuf::from(home)
-    } else {
-        // Last resort: current directory
-        PathBuf::from(".")
-    }
+/// Best-effort user home (`$HOME` / `%USERPROFILE%`), for `~/.hermes`.
+fn user_home_dir() -> PathBuf {
+    directories::UserDirs::new()
+        .map(|d| d.home_dir().to_path_buf())
+        .or_else(|| std::env::var("HOME").ok().map(PathBuf::from))
+        .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 /// Hermes state root directory (same rule as CLI `--config-dir` / gateway data).

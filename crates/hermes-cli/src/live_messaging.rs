@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use hermes_config::{GatewayConfig, PlatformConfig};
+use hermes_config::{extra_string, platform_token_or_extra, GatewayConfig, PlatformConfig};
 use hermes_core::ToolHandler;
 use hermes_gateway::gateway::GatewayConfig as RuntimeGatewayConfig;
 use hermes_gateway::platforms::api_server::{ApiServerAdapter, ApiServerConfig};
@@ -21,35 +21,12 @@ use hermes_gateway::platforms::webhook::{WebhookAdapter, WebhookConfig};
 use hermes_gateway::platforms::wecom::{WeComAdapter, WeComConfig};
 use hermes_gateway::platforms::weixin::{WeChatAdapter, WeixinConfig};
 use hermes_gateway::platforms::whatsapp::{WhatsAppAdapter, WhatsAppConfig};
-use hermes_gateway::{DmManager, Gateway, SessionManager};
+use hermes_gateway::{
+    evaluate_gateway_requirements, DmManager, Gateway, RequirementScope, RequirementSeverity,
+    SessionManager,
+};
 use hermes_tools::tools::messaging::SendMessageHandler;
 use hermes_tools::ToolRegistry;
-
-fn platform_token_or_extra(platform_cfg: &PlatformConfig) -> Option<String> {
-    platform_cfg
-        .token
-        .clone()
-        .filter(|t| !t.trim().is_empty())
-        .or_else(|| {
-            platform_cfg
-                .extra
-                .get("token")
-                .and_then(|v| v.as_str())
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(String::from)
-        })
-}
-
-fn extra_string(platform_cfg: &PlatformConfig, key: &str) -> Option<String> {
-    platform_cfg
-        .extra
-        .get(key)
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-}
 
 fn extra_bool(platform_cfg: &PlatformConfig, key: &str, default: bool) -> bool {
     platform_cfg
@@ -90,10 +67,19 @@ fn register_live_send_message_tool(registry: &ToolRegistry, gateway: Arc<Gateway
 }
 
 async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gateway>) -> Vec<String> {
+    use std::collections::HashSet;
+
+    let fatal_platforms: HashSet<String> =
+        evaluate_gateway_requirements(config, RequirementScope::LiveMessaging)
+            .into_iter()
+            .filter(|i| i.severity == RequirementSeverity::Fatal)
+            .map(|i| i.platform)
+            .collect();
+
     let mut registered = Vec::new();
 
     if let Some(platform_cfg) = config.platforms.get("telegram") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("telegram") {
             if let Some(token) = platform_token_or_extra(platform_cfg) {
                 let polling = platform_cfg
                     .extra
@@ -139,7 +125,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("discord") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("discord") {
             if let Some(token) = platform_token_or_extra(platform_cfg) {
                 let discord_cfg = DiscordConfig {
                     token,
@@ -164,7 +150,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("slack") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("slack") {
             if let Some(token) = platform_token_or_extra(platform_cfg) {
                 let slack_cfg = SlackConfig {
                     token,
@@ -184,7 +170,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("matrix") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("matrix") {
             let homeserver_url = extra_string(platform_cfg, "homeserver_url")
                 .or_else(|| extra_string(platform_cfg, "homeserver"))
                 .unwrap_or_default();
@@ -212,7 +198,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("mattermost") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("mattermost") {
             let token = platform_token_or_extra(platform_cfg).unwrap_or_default();
             let server_url = extra_string(platform_cfg, "server_url")
                 .or_else(|| extra_string(platform_cfg, "url"))
@@ -238,7 +224,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("signal") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("signal") {
             let phone_number = extra_string(platform_cfg, "phone_number")
                 .or_else(|| extra_string(platform_cfg, "account"))
                 .unwrap_or_default();
@@ -261,7 +247,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("whatsapp") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("whatsapp") {
             if let Some(token) = platform_token_or_extra(platform_cfg) {
                 let wa_cfg = WhatsAppConfig {
                     token,
@@ -284,7 +270,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("dingtalk") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("dingtalk") {
             let ding_cfg = DingTalkConfig::from_platform_config(platform_cfg);
             match DingTalkAdapter::new(ding_cfg) {
                 Ok(adapter) => {
@@ -299,7 +285,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("feishu") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("feishu") {
             let app_id = extra_string(platform_cfg, "app_id").unwrap_or_default();
             let app_secret = extra_string(platform_cfg, "app_secret").unwrap_or_default();
             if !app_id.is_empty() && !app_secret.is_empty() {
@@ -322,7 +308,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("wecom") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("wecom") {
             let corp_id = extra_string(platform_cfg, "corp_id").unwrap_or_default();
             let agent_id = extra_string(platform_cfg, "agent_id").unwrap_or_default();
             let secret = extra_string(platform_cfg, "secret").unwrap_or_default();
@@ -349,7 +335,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
         .get("qqbot")
         .or_else(|| config.platforms.get("qq"))
     {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("qqbot") {
             let app_id = extra_string(platform_cfg, "app_id").unwrap_or_default();
             let client_secret = extra_string(platform_cfg, "client_secret").unwrap_or_default();
             if !app_id.is_empty() && !client_secret.is_empty() {
@@ -371,7 +357,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("bluebubbles") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("bluebubbles") {
             let server_url = extra_string(platform_cfg, "server_url").unwrap_or_default();
             let password = extra_string(platform_cfg, "password").unwrap_or_default();
             if !server_url.is_empty() && !password.is_empty() {
@@ -394,7 +380,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("email") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("email") {
             let imap_host = extra_string(platform_cfg, "imap_host").unwrap_or_default();
             let smtp_host = extra_string(platform_cfg, "smtp_host").unwrap_or_default();
             let username = extra_string(platform_cfg, "username").unwrap_or_default();
@@ -430,7 +416,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("sms") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("sms") {
             let account_sid = extra_string(platform_cfg, "account_sid").unwrap_or_default();
             let auth_token = extra_string(platform_cfg, "auth_token").unwrap_or_default();
             let from_number = extra_string(platform_cfg, "from_number").unwrap_or_default();
@@ -455,7 +441,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("homeassistant") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("homeassistant") {
             let base_url = extra_string(platform_cfg, "base_url").unwrap_or_default();
             let long_lived_token = platform_token_or_extra(platform_cfg)
                 .or_else(|| extra_string(platform_cfg, "long_lived_token"))
@@ -481,7 +467,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("webhook") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("webhook") {
             let secret = extra_string(platform_cfg, "secret").unwrap_or_default();
             if !secret.is_empty() {
                 let wh_cfg = WebhookConfig {
@@ -513,7 +499,7 @@ async fn register_outbound_adapters(config: &GatewayConfig, gateway: &Arc<Gatewa
     }
 
     if let Some(platform_cfg) = config.platforms.get("weixin") {
-        if platform_cfg.enabled {
+        if platform_cfg.enabled && !fatal_platforms.contains("weixin") {
             let account_id = extra_string(platform_cfg, "account_id").unwrap_or_default();
             let token = platform_token_or_extra(platform_cfg).unwrap_or_default();
             if !account_id.is_empty() && !token.is_empty() {

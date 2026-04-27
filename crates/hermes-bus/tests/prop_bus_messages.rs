@@ -56,18 +56,17 @@ fn arb_bus_message() -> impl Strategy<Value = BusMessage> {
                     done: true,
                 })
             }),
-        (small.prop_map(|s| s.to_string()), any::<bool>())
-            .prop_map(|(sid, reset)| {
-                BusMessage::SessionQuery(SessionQuery {
-                    request_id: format!("req-{sid}"),
-                    session_id: sid,
-                    action: if reset {
-                        SessionQueryAction::ResetSession
-                    } else {
-                        SessionQueryAction::GetMessages
-                    },
-                })
-            }),
+        (small.prop_map(|s| s.to_string()), any::<bool>()).prop_map(|(sid, reset)| {
+            BusMessage::SessionQuery(SessionQuery {
+                request_id: format!("req-{sid}"),
+                session_id: sid,
+                action: if reset {
+                    SessionQueryAction::ResetSession
+                } else {
+                    SessionQueryAction::GetMessages
+                },
+            })
+        }),
         any::<bool>().prop_map(|include| {
             BusMessage::StatusQuery(StatusQuery {
                 include_platforms: include,
