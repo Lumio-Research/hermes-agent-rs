@@ -138,7 +138,7 @@ pub fn register_builtin_tools(
         );
     }
 
-    // -- Image generation ----------------------------------------------------
+    // -- Image generation (fal.ai) -------------------------------------------
     {
         let backend = crate::backends::image_gen::FalImageGenBackend::from_env()
             .unwrap_or_else(|_| crate::backends::image_gen::FalImageGenBackend::new(String::new()));
@@ -152,6 +152,76 @@ pub fn register_builtin_tools(
             vec!["FAL_KEY".into()],
         );
     }
+
+    // -- GPT Image (OpenAI gpt-image-1) -------------------------------------
+    {
+        let backend = crate::backends::gpt_image::OpenAiGptImageBackend::from_env_or_managed()
+            .unwrap_or_else(|_| {
+                crate::backends::gpt_image::OpenAiGptImageBackend::new(
+                    String::new(),
+                    "https://api.openai.com/v1".into(),
+                )
+            });
+        reg(
+            registry,
+            "image_gen",
+            Arc::new(crate::tools::gpt_image::GptImageHandler::new(Arc::new(
+                backend,
+            ))),
+            "🖼️",
+            vec!["OPENAI_API_KEY".into()],
+        );
+    }
+
+    // -- Video generation (SeedDance2) ---------------------------------------
+    {
+        let backend =
+            crate::backends::video_gen::SeedDance2Backend::from_env().unwrap_or_else(|_| {
+                crate::backends::video_gen::SeedDance2Backend::new(
+                    String::new(),
+                    "https://api.seeddance.com/v2".into(),
+                )
+            });
+        let backend = Arc::new(backend);
+        reg(
+            registry,
+            "video",
+            Arc::new(crate::tools::video_gen::VideoGenerateHandler::new(
+                backend.clone(),
+            )),
+            "🎬",
+            vec!["SEEDDANCE_API_KEY".into()],
+        );
+        reg(
+            registry,
+            "video",
+            Arc::new(crate::tools::video_gen::VideoStatusHandler::new(backend)),
+            "📊",
+            vec!["SEEDDANCE_API_KEY".into()],
+        );
+    }
+
+    // -- Audio generation (music, SFX, voice cloning) ------------------------
+    reg(
+        registry,
+        "audio",
+        Arc::new(crate::tools::audio_gen::AudioGenerateHandler::new(
+            Arc::new(crate::backends::audio_gen::MultiAudioGenBackend::new()),
+        )),
+        "🎵",
+        vec![],
+    );
+
+    // -- Media workflow orchestrator -----------------------------------------
+    reg(
+        registry,
+        "media",
+        Arc::new(crate::tools::media_workflow::MediaWorkflowHandler::new(
+            Arc::new(crate::tools::media_workflow::PlanningWorkflowBackend::new()),
+        )),
+        "🎞️",
+        vec![],
+    );
 
     // -- Skills (3 tools) ----------------------------------------------------
     reg(

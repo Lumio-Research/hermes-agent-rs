@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Routes, Route, NavLink, Navigate } from "react-router-dom";
 import {
+  Bot,
   Activity,
   BarChart3,
   Clock,
@@ -33,6 +34,13 @@ import LogsPage from "@/pages/LogsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import CronPage from "@/pages/CronPage";
 import SkillsPage from "@/pages/SkillsPage";
+import LandingPage from "@/pages/LandingPage";
+import LoginPage from "@/pages/LoginPage";
+import RegisterPage from "@/pages/RegisterPage";
+import SubscriptionPage from "@/pages/SubscriptionPage";
+import ApiKeysPage from "@/pages/ApiKeysPage";
+import PlatformConnectionsPage from "@/pages/PlatformConnectionsPage";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { useI18n } from "@/i18n";
@@ -40,29 +48,30 @@ import { usePlugins } from "@/plugins";
 import type { RegisteredPlugin } from "@/plugins";
 
 const BUILTIN_NAV: NavItem[] = [
-  { path: "/", labelKey: "status", label: "Status", icon: Activity },
+  { path: "/dashboard", labelKey: "status", label: "Status", icon: Activity },
   {
-    path: "/sessions",
+    path: "/dashboard/sessions",
     labelKey: "sessions",
     label: "Sessions",
     icon: MessageSquare,
   },
   {
-    path: "/analytics",
+    path: "/dashboard/analytics",
     labelKey: "analytics",
     label: "Analytics",
     icon: BarChart3,
   },
-  { path: "/logs", labelKey: "logs", label: "Logs", icon: FileText },
-  { path: "/cron", labelKey: "cron", label: "Cron", icon: Clock },
-  { path: "/skills", labelKey: "skills", label: "Skills", icon: Package },
-  { path: "/config", labelKey: "config", label: "Config", icon: Settings },
-  { path: "/env", labelKey: "keys", label: "Keys", icon: KeyRound },
+  { path: "/dashboard/logs", labelKey: "logs", label: "Logs", icon: FileText },
+  { path: "/dashboard/cron", labelKey: "cron", label: "Cron", icon: Clock },
+  { path: "/dashboard/skills", labelKey: "skills", label: "Skills", icon: Package },
+  { path: "/dashboard/config", labelKey: "config", label: "Config", icon: Settings },
+  { path: "/dashboard/env", labelKey: "keys", label: "Keys", icon: KeyRound },
 ];
 
 // Plugins can reference any of these by name in their manifest — keeps bundle
 // size sane vs. importing the full lucide-react set.
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  Bot,
   Activity,
   BarChart3,
   Clock,
@@ -167,7 +176,7 @@ export default function App() {
                 <Cell key={path} className="relative !p-0">
                   <NavLink
                     to={path}
-                    end={path === "/"}
+                    end={path === "/dashboard"}
                     className={({ isActive }) =>
                       cn(
                         "group relative flex h-full w-full items-center gap-1.5",
@@ -229,20 +238,29 @@ export default function App() {
 
       <main className="relative z-2 mx-auto w-full max-w-[1600px] flex-1 px-3 sm:px-6 pt-16 sm:pt-20 pb-4 sm:pb-8">
         <Routes>
-          <Route path="/" element={<StatusPage />} />
-          <Route path="/sessions" element={<SessionsPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/logs" element={<LogsPage />} />
-          <Route path="/cron" element={<CronPage />} />
-          <Route path="/skills" element={<SkillsPage />} />
-          <Route path="/config" element={<ConfigPage />} />
-          <Route path="/env" element={<EnvPage />} />
+          {/* Public routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+
+          {/* Protected dashboard routes */}
+          <Route path="/dashboard" element={<ProtectedRoute><StatusPage /></ProtectedRoute>} />
+          <Route path="/dashboard/sessions" element={<ProtectedRoute><SessionsPage /></ProtectedRoute>} />
+          <Route path="/dashboard/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+          <Route path="/dashboard/logs" element={<ProtectedRoute><LogsPage /></ProtectedRoute>} />
+          <Route path="/dashboard/cron" element={<ProtectedRoute><CronPage /></ProtectedRoute>} />
+          <Route path="/dashboard/skills" element={<ProtectedRoute><SkillsPage /></ProtectedRoute>} />
+          <Route path="/dashboard/config" element={<ProtectedRoute><ConfigPage /></ProtectedRoute>} />
+          <Route path="/dashboard/env" element={<ProtectedRoute><EnvPage /></ProtectedRoute>} />
+          <Route path="/dashboard/subscription" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
+          <Route path="/dashboard/keys" element={<ProtectedRoute><ApiKeysPage /></ProtectedRoute>} />
+          <Route path="/dashboard/platforms" element={<ProtectedRoute><PlatformConnectionsPage /></ProtectedRoute>} />
 
           {plugins.map(({ manifest, component: PluginComponent }) => (
             <Route
               key={manifest.name}
-              path={manifest.tab.path}
-              element={<PluginComponent />}
+              path={`/dashboard${manifest.tab.path}`}
+              element={<ProtectedRoute><PluginComponent /></ProtectedRoute>}
             />
           ))}
 

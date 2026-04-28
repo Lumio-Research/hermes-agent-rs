@@ -41,7 +41,6 @@ use clap::{Parser, Subcommand};
 #[derive(Debug, Clone, Subcommand)]
 pub enum CliCommand {
     // ── Core ────────────────────────────────────────────────────────
-
     /// Start an interactive session (default when no subcommand is given).
     #[command(name = "hermes")]
     Hermes,
@@ -99,7 +98,6 @@ pub enum CliCommand {
     },
 
     // ── Configuration & Model ───────────────────────────────────────
-
     /// Configuration management.
     ///
     /// Examples:
@@ -153,7 +151,6 @@ pub enum CliCommand {
     },
 
     // ── Tools & Extensions ──────────────────────────────────────────
-
     /// List or manage available tools.
     Tools {
         /// Action: "list", "enable <name>", or "disable <name>".
@@ -195,7 +192,6 @@ pub enum CliCommand {
     },
 
     // ── Data & Sessions ─────────────────────────────────────────────
-
     /// Session management (list, export, delete, stats, dump).
     ///
     /// Examples:
@@ -252,7 +248,6 @@ pub enum CliCommand {
     },
 
     // ── System ──────────────────────────────────────────────────────
-
     /// Run the interactive setup wizard.
     Setup,
 
@@ -310,7 +305,6 @@ pub enum CliCommand {
         #[arg(long)]
         yes: bool,
     },
-
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +350,6 @@ impl Cli {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -397,7 +390,13 @@ mod tests {
     fn cli_parse_serve_defaults() {
         let cli = Cli::try_parse_from(vec!["hermes", "serve"]).unwrap();
         match cli.command {
-            Some(CliCommand::Serve { action, host, port, no_gateway, no_cron }) => {
+            Some(CliCommand::Serve {
+                action,
+                host,
+                port,
+                no_gateway,
+                no_cron,
+            }) => {
                 assert!(action.is_none());
                 assert_eq!(host, "0.0.0.0");
                 assert_eq!(port, 3000);
@@ -411,12 +410,25 @@ mod tests {
     #[test]
     fn cli_parse_serve_with_flags() {
         let cli = Cli::try_parse_from(vec![
-            "hermes", "serve", "start",
-            "--host", "127.0.0.1", "--port", "9090",
-            "--no-gateway", "--no-cron",
-        ]).unwrap();
+            "hermes",
+            "serve",
+            "start",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "9090",
+            "--no-gateway",
+            "--no-cron",
+        ])
+        .unwrap();
         match cli.command {
-            Some(CliCommand::Serve { action, host, port, no_gateway, no_cron }) => {
+            Some(CliCommand::Serve {
+                action,
+                host,
+                port,
+                no_gateway,
+                no_cron,
+            }) => {
                 assert_eq!(action.as_deref(), Some("start"));
                 assert_eq!(host, "127.0.0.1");
                 assert_eq!(port, 9090);
@@ -431,7 +443,9 @@ mod tests {
     fn cli_parse_auth_login() {
         let cli = Cli::try_parse_from(vec!["hermes", "auth", "login", "openai"]).unwrap();
         match cli.command {
-            Some(CliCommand::Auth { action, provider, .. }) => {
+            Some(CliCommand::Auth {
+                action, provider, ..
+            }) => {
                 assert_eq!(action.as_deref(), Some("login"));
                 assert_eq!(provider.as_deref(), Some("openai"));
             }

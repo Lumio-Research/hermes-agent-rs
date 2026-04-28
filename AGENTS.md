@@ -58,7 +58,6 @@ hermes-agent-rust/
     ├── hermes-acp/           # Agent Communication Protocol
     ├── hermes-eval/          # Evaluation framework (Runner, BenchmarkAdapter, Verifier)
     ├── hermes-server/        # HTTP/WebSocket API server
-    ├── hermes-auth/          # OAuth token exchange
     ├── hermes-telemetry/     # OpenTelemetry + Prometheus metrics
     └── hermes-parity-tests/  # Golden fixture tests for behavioral parity
 ```
@@ -73,7 +72,6 @@ hermes-cli (binary entry point)
 │   ├── hermes-core (types, traits, errors)
 │   ├── hermes-intelligence (routing, prompts, pricing)
 │   ├── hermes-config (config loading)
-│   └── hermes-auth (OAuth)
 ├── hermes-tools (30 tool backends)
 ├── hermes-gateway (17 platform adapters)
 │   └── hermes-core

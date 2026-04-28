@@ -32,13 +32,14 @@ serde_yaml = "0.9"
 tracing = { workspace = true }
 futures = { workspace = true }
 chrono = { workspace = true }
+uuid = { workspace = true }
 axum = { version = "0.8", features = ["ws"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "cors", "limit", "fs"] }
 libc = "0.2"
+reqwest = { workspace = true }
 
 [dev-dependencies]
-reqwest = { workspace = true }
 http-body-util = "0.1"
 tracing-subscriber = { workspace = true }
 proptest = { workspace = true }

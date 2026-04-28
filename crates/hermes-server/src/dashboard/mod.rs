@@ -11,7 +11,7 @@ pub mod logs;
 pub mod sessions;
 pub mod skills;
 pub mod status;
-mod stubs;
+pub mod stubs;
 pub mod types;
 
 use axum::routing::{delete, get, post, put};

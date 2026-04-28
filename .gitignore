@@ -6,6 +6,7 @@ GEO-AI/
 *.pdb
 .DS_Store
 .env
+.env.cloud.local
 *.log
 vout-endianness-analysis.md
 
@@ -20,3 +21,5 @@ dist
 deploy
 .kiro
 .vscode
+
+refs

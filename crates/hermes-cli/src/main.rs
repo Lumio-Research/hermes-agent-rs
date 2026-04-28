@@ -15,7 +15,6 @@
 use clap::CommandFactory;
 use clap::Parser;
 use clap_complete::{generate, Shell as CompletionShell};
-use hermes_auth::{AuthManager, FileTokenStore, OAuthCredential};
 use hermes_cli::app::provider_api_key_from_env;
 use hermes_cli::cli::{Cli, CliCommand};
 use hermes_cli::App;
@@ -34,6 +33,9 @@ use hermes_telemetry::init_telemetry_from_env;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::Arc;
+
+mod oauth_store;
+use oauth_store::{AuthManager, FileTokenStore, OAuthCredential};
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -50,7 +52,11 @@ async fn main() {
             preload_skill,
             yolo,
         } => hermes_cli::commands::handle_cli_chat(query, preload_skill, yolo).await,
-        CliCommand::Model { provider_model, sub_action, sub_arg } => {
+        CliCommand::Model {
+            provider_model,
+            sub_action,
+            sub_arg,
+        } => {
             // "hermes model provider list" → delegate to runtime-provider handler
             if provider_model.as_deref() == Some("provider") {
                 hermes_cli::commands::handle_cli_runtime_provider(sub_action, sub_arg).await
@@ -72,7 +78,9 @@ async fn main() {
             if action.as_deref() == Some("setup") && platform.is_some() {
                 let plat = platform.unwrap();
                 match plat.as_str() {
-                    "whatsapp" | "wa" => hermes_cli::commands::handle_cli_whatsapp(Some("setup".to_string())).await,
+                    "whatsapp" | "wa" => {
+                        hermes_cli::commands::handle_cli_whatsapp(Some("setup".to_string())).await
+                    }
                     _ => run_gateway(cli, action).await,
                 }
             } else {
@@ -128,7 +136,12 @@ async fn main() {
         CliCommand::Mcp { action, server } => {
             hermes_cli::commands::handle_cli_mcp(action, server).await
         }
-        CliCommand::Sessions { action, id, name, output } => {
+        CliCommand::Sessions {
+            action,
+            id,
+            name,
+            output,
+        } => {
             // "hermes sessions dump" → delegate to dump
             if action.as_deref() == Some("dump") {
                 run_dump(cli, id, output).await
@@ -157,7 +170,6 @@ async fn main() {
         } => run_serve(cli, action, host, port, no_gateway, no_cron).await,
         CliCommand::Completion { shell } => run_completion(shell),
         CliCommand::Uninstall { yes } => run_uninstall(yes).await,
-
     };
 
     if let Err(e) = result {
@@ -442,7 +454,7 @@ async fn run_gateway(cli: Cli, action: Option<String>) -> Result<(), AgentError>
         }
         None | Some("start") => {
             println!("Starting Hermes Gateway...");
-            println!("Using unified RuntimeBuilder for gateway start.");
+            println!("Gateway start in engine mode uses `hermes serve` pipeline.");
             let pid_path = gateway_pid_path_for_cli(&cli);
             if let Some(pid) = read_gateway_pid(&pid_path) {
                 if gateway_pid_is_alive(pid) {
@@ -461,12 +473,9 @@ async fn run_gateway(cli: Cli, action: Option<String>) -> Result<(), AgentError>
             std::fs::write(&pid_path, format!("{}\n", std::process::id()))
                 .map_err(|e| AgentError::Io(format!("failed to write PID file: {}", e)))?;
 
-            let res = hermes_runtime::RuntimeBuilder::new(config.clone())
-                .with_plugin_manager(hermes_runtime::empty_plugin_manager())
-                .with_platforms()
-                .with_cron()
-                .run()
-                .await;
+            println!("RuntimeBuilder is not enabled in engine-only mode.");
+            println!("Use `hermes serve start` to run API + gateway together.");
+            let res = Ok(());
             let _ = std::fs::remove_file(&pid_path);
             return res;
         }
@@ -2102,23 +2111,20 @@ async fn run_serve(
             std::fs::write(&pid_path, format!("{}\n", std::process::id()))
                 .map_err(|e| AgentError::Io(format!("failed to write PID file: {}", e)))?;
 
-            let mut builder = hermes_runtime::RuntimeBuilder::new(config)
-                .with_plugin_manager(hermes_runtime::empty_plugin_manager())
-                .with_dashboard(addr);
-            if !no_gateway {
-                builder = builder.with_platforms();
+            let cloud_mode = std::env::var("HERMES_CLOUD_MODE")
+                .ok()
+                .map(|v| is_truthy(&v))
+                .unwrap_or(false);
+            if cloud_mode {
+                println!("Cloud mode is not available in engine-only hermes-server.");
+                println!("Falling back to single-user API server mode.");
             }
-            if !no_cron {
-                builder = builder.with_cron();
+            if !no_gateway || !no_cron {
+                println!("Gateway/cron sidecars require runtime integration and are skipped in engine mode.");
             }
-
-            println!(
-                "Starting unified runtime (api=true, gateway={}, cron={})",
-                !no_gateway, !no_cron
-            );
             println!("API server listening at http://{}", addr);
 
-            let res = builder.run().await;
+            let res = hermes_server::run_server(addr, config).await;
             let _ = std::fs::remove_file(&pid_path);
             res
         }

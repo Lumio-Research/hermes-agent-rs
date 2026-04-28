@@ -3,6 +3,7 @@
 //! Each submodule implements one or more tool handlers that conform
 //! to the `ToolHandler` trait from `hermes-core`.
 
+pub mod audio_gen;
 pub mod browser;
 pub mod clarify;
 pub mod code_execution;
@@ -11,9 +12,11 @@ pub mod cronjob;
 pub mod delegation;
 pub mod env_passthrough;
 pub mod file;
+pub mod gpt_image;
 pub mod homeassistant;
 pub mod image_gen;
 pub mod managed_tool_gateway;
+pub mod media_workflow;
 pub mod memory;
 pub mod messaging;
 pub mod mixture_of_agents;
@@ -30,6 +33,7 @@ pub mod transcription;
 pub mod tts;
 pub mod tts_premium;
 pub mod url_safety;
+pub mod video_gen;
 pub mod vision;
 pub mod voice_mode;
 pub mod web;

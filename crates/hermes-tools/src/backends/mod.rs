@@ -4,12 +4,14 @@
 //! defined in the `tools` module, connecting to real APIs, file systems,
 //! databases, and external services.
 
+pub mod audio_gen;
 pub mod browser;
 pub mod clarify;
 pub mod code_execution;
 pub mod cronjob;
 pub mod delegation;
 pub mod file;
+pub mod gpt_image;
 pub mod homeassistant;
 pub mod image_gen;
 pub mod memory;
@@ -17,5 +19,6 @@ pub mod messaging;
 pub mod session_search;
 pub mod todo;
 pub mod tts;
+pub mod video_gen;
 pub mod vision;
 pub mod web;

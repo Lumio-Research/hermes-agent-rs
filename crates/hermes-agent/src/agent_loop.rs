@@ -14,7 +14,6 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
-use hermes_auth::{exchange_refresh_token, OAuth2Endpoints};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::task::JoinSet;
@@ -1620,25 +1619,52 @@ impl AgentLoop {
         client_id: &str,
         refresh_token: &str,
     ) -> Result<OAuthStoreCredential, AgentError> {
-        let endpoints = OAuth2Endpoints {
-            authorize_url: "https://placeholder.invalid/oauth/authorize".to_string(),
-            token_url: token_url.to_string(),
-            client_id: client_id.to_string(),
-            redirect_uri: "http://127.0.0.1/unused".to_string(),
-            scopes: vec![],
-        };
-        let cred = exchange_refresh_token(provider_key, &endpoints, refresh_token)
+        #[derive(Debug, Deserialize)]
+        struct OAuthRefreshResponse {
+            access_token: String,
+            #[serde(default)]
+            token_type: Option<String>,
+            refresh_token: Option<String>,
+            scope: Option<String>,
+            expires_in: Option<i64>,
+        }
+
+        let client = reqwest::Client::new();
+        let pairs = [
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_token),
+            ("client_id", client_id),
+        ];
+        let resp = client
+            .post(token_url)
+            .header("Accept", "application/json")
+            .form(&pairs)
+            .send()
             .await
             .map_err(|e| AgentError::AuthFailed(e.to_string()))?;
+        if !resp.status().is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(AgentError::AuthFailed(format!(
+                "token refresh failed for {}: {}",
+                provider_key, text
+            )));
+        }
+        let body: OAuthRefreshResponse = resp
+            .json()
+            .await
+            .map_err(|e| AgentError::AuthFailed(e.to_string()))?;
+        let expires_at = body
+            .expires_in
+            .map(|s| Utc::now() + chrono::Duration::seconds(s));
         Ok(OAuthStoreCredential {
             provider: Some(provider_key.to_string()),
-            access_token: cred.access_token,
-            refresh_token: cred
+            access_token: body.access_token,
+            refresh_token: body
                 .refresh_token
                 .or_else(|| Some(refresh_token.to_string())),
-            token_type: Some(cred.token_type),
-            scope: cred.scope,
-            expires_at: cred.expires_at,
+            token_type: Some(body.token_type.unwrap_or_else(|| "Bearer".to_string())),
+            scope: body.scope,
+            expires_at,
         })
     }
 
@@ -6073,7 +6099,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let home = std::env::temp_dir().join(format!("hermes-auth-fixture-{}", nonce));
+        let home = std::env::temp_dir().join(format!("hermes-oauth-fixture-{}", nonce));
         let auth_dir = home.join("auth");
         std::fs::create_dir_all(&auth_dir).expect("create auth dir");
         std::fs::write(

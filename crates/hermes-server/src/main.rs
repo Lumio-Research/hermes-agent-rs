@@ -15,5 +15,6 @@ async fn main() -> Result<(), AgentError> {
         .unwrap_or_else(|_| "127.0.0.1:8787".to_string())
         .parse()
         .map_err(|e| AgentError::Config(format!("invalid server addr: {}", e)))?;
+
     hermes_server::run_server(addr, config).await
 }

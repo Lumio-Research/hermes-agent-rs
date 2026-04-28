@@ -1,6 +1,8 @@
-# Hermes Agent — Web UI
+# Hermes Agent — Admin Dashboard
 
-Browser-based dashboard for managing Hermes Agent configuration, API keys, and monitoring active sessions.
+Browser-based admin dashboard for operators and maintainers. It is used for platform management (status, logs, sessions, config, analytics, cron, skills, keys).
+
+Cloud Agent end-user chat/create flows are intentionally hosted in `apps/client`, not in this dashboard.
 
 ## Stack
 

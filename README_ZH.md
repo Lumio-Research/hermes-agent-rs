@@ -92,7 +92,6 @@ hermes-cli                    # 二进制入口、TUI、斜杠命令
 ├── hermes-skills             # 技能管理与 Hub
 ├── hermes-cron               # 定时任务调度
 ├── hermes-server             # HTTP/WebSocket API 服务
-├── hermes-auth               # OAuth 令牌交换
 ├── hermes-eval               # SWE-bench、Terminal-Bench、YC Bench
 └── hermes-telemetry          # OpenTelemetry + Prometheus
 ```

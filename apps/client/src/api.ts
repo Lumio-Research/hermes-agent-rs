@@ -20,7 +20,24 @@ const isTauri = (() => {
 })();
 
 // Browser remote API base (used when not in Tauri)
-let browserApiBase = "http://127.0.0.1:3000";
+function inferBrowserApiBase(): string {
+  if (typeof window === "undefined") return "http://127.0.0.1:8787";
+  const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+  const host = window.location.hostname || "127.0.0.1";
+  return `${protocol}//${host}:8787`;
+}
+
+function normalizeBrowserApiBase(raw: string): string {
+  const trimmed = normalizeApiBase(raw.trim());
+  // Migrate legacy local default to cloud/dev server default.
+  if (trimmed === "http://127.0.0.1:3000" || trimmed === "http://localhost:3000") {
+    return inferBrowserApiBase();
+  }
+  return trimmed;
+}
+
+let browserApiBase = inferBrowserApiBase();
+const LS_TOKEN_KEY = "hermes_api_token";
 const PLUGIN_MIGRATION_FLAG = "hermes.plugins.remote.migrated.v1";
 const LEGACY_CONFIG_KEY = "hermes.desktop.config";
 const SESSIONS_STORAGE_KEY = "hermes.browser.sessions.v1";
@@ -33,6 +50,57 @@ const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
   mcp_database: false,
   tool_code_exec: true,
 };
+
+function normalizeApiBase(raw: string): string {
+  return raw.replace(/\/$/, "");
+}
+
+function getApiBase(): string {
+  const fromEnv =
+    typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
+      ? String(import.meta.env.VITE_API_BASE_URL)
+      : "";
+  const base = fromEnv || browserApiBase;
+  return normalizeApiBase(base);
+}
+
+export function apiUrl(path: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${getApiBase()}${p}`;
+}
+
+export function resolveWebSocketUrl(path: string, token?: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const base = getApiBase();
+  const origin = new URL(base);
+  const wsProto = origin.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new URL(`${wsProto}//${origin.host}${p}`);
+  const bearer = token ?? resolveBearerToken();
+  if (bearer) ws.searchParams.set("token", bearer);
+  return ws.toString();
+}
+
+export function resolveBearerToken(): string | null {
+  try {
+    const v = localStorage.getItem(LS_TOKEN_KEY);
+    return v && v.trim() ? v.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  const token = resolveBearerToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const response = await fetch(apiUrl(path), { ...init, headers });
+  if (!response.ok) {
+    throw new Error(await response.text().catch(() => response.statusText));
+  }
+  return response.json();
+}
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri) {
@@ -149,7 +217,7 @@ let mockProjects: Project[] = [
   { id: "p1", name: "hermes-agent-rust", path: "/Users/ly/workspace/research/hermes-agent-rust" },
 ];
 let mockConfig: AppConfig = {
-  api_base: "http://127.0.0.1:3000",
+  api_base: inferBrowserApiBase(),
   default_model: "",
   theme: "dark",
   mode: "remote",  // Browser always uses remote mode
@@ -175,6 +243,11 @@ function loadBrowserState() {
       const parsed = JSON.parse(rawConfig);
       if (parsed && typeof parsed === "object") {
         mockConfig = { ...mockConfig, ...parsed };
+        if (typeof mockConfig.api_base === "string" && mockConfig.api_base.trim()) {
+          const normalized = normalizeBrowserApiBase(mockConfig.api_base);
+          browserApiBase = normalized;
+          mockConfig.api_base = normalized;
+        }
       }
     }
   } catch {
@@ -253,6 +326,11 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     case "get_config": return mockConfig as T;
     case "update_config": {
       mockConfig = args?.config as AppConfig;
+      if (typeof mockConfig.api_base === "string" && mockConfig.api_base.trim()) {
+        const normalized = normalizeBrowserApiBase(mockConfig.api_base);
+        browserApiBase = normalized;
+        mockConfig.api_base = normalized;
+      }
       persistBrowserState();
       return mockConfig as T;
     }
@@ -396,3 +474,163 @@ export const updateConfig = (config: AppConfig) => invoke<AppConfig>("update_con
 export const getAutomationTasks = () => invoke<AutomationTask[]>("get_automation_tasks");
 export const checkBackendHealth = () => invoke<boolean>("check_backend_health");
 export const execCommand = (command: string, sessionId?: string) => invoke<string>("exec_command", { command, sessionId });
+
+export interface AuthUserDto {
+  id: string;
+  email: string;
+  tenant_id: string;
+}
+
+export interface AuthTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: AuthUserDto;
+}
+
+export interface CloudAgentGitPolicy {
+  auto_commit_enabled: boolean;
+  auto_push_enabled: boolean;
+  target_branch: string;
+  protected_branches: string[];
+}
+
+export interface CloudAgentSession {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  sandbox_id: string;
+  repo_url: string;
+  branch: string;
+  model?: string;
+  mode: "on_demand" | "persistent";
+  status: string;
+  agent_base_url?: string;
+  git_policy?: CloudAgentGitPolicy;
+  created_at: string;
+  last_active_at: string;
+}
+
+export interface CloudAgentMessageRecord {
+  id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  status: string;
+  created_at: string;
+}
+
+export interface CloudAgentCommitRecord {
+  id: string;
+  session_id: string;
+  commit_sha: string;
+  commit_message: string;
+  branch: string;
+  pushed: boolean;
+  created_at: string;
+}
+
+export const authLogin = (email: string, password: string) =>
+  fetchJSON<AuthTokenResponse>("/api/v1/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+export const authRegister = (email: string, password: string) =>
+  fetchJSON<AuthTokenResponse>("/api/v1/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+export const authMe = (token?: string) => {
+  const headers = new Headers();
+  const bearer = token ?? resolveBearerToken();
+  if (bearer) headers.set("Authorization", `Bearer ${bearer}`);
+  return fetchJSON<{ user: AuthUserDto }>("/api/v1/auth/me", { headers });
+};
+
+export const authOAuthStart = (provider: "google" | "github") =>
+  fetchJSON<{ auth_url: string; state: string }>(
+    `/api/v1/auth/oauth/${encodeURIComponent(provider)}/start`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    },
+  );
+
+export const getCloudAgents = () =>
+  fetchJSON<{ sessions: CloudAgentSession[] }>("/api/v1/agents");
+
+export const createCloudAgent = (payload: {
+  repo_url: string;
+  branch: string;
+  model?: string;
+  startup_commands?: string[];
+  mode?: "on_demand" | "persistent";
+  idempotency_key?: string;
+}) =>
+  fetchJSON<CloudAgentSession>("/api/v1/agents", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+export const deleteCloudAgent = (id: string) =>
+  fetchJSON<{ ok: boolean }>(`/api/v1/agents/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+
+export const getCloudAgentStatus = (id: string) =>
+  fetchJSON<{ session: CloudAgentSession; in_flight: boolean }>(
+    `/api/v1/agents/${encodeURIComponent(id)}/status`,
+  );
+
+export const getCloudAgentMessages = (id: string) =>
+  fetchJSON<{ messages: CloudAgentMessageRecord[] }>(
+    `/api/v1/agents/${encodeURIComponent(id)}/messages`,
+  );
+
+export const sendCloudAgentMessage = (
+  id: string,
+  payload: { text: string; model?: string },
+) =>
+  fetchJSON<{ session_id: string; reply: string }>(
+    `/api/v1/agents/${encodeURIComponent(id)}/messages`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+
+export const interruptCloudAgent = (id: string) =>
+  fetchJSON<{ ok: boolean; interrupted: boolean }>(
+    `/api/v1/agents/${encodeURIComponent(id)}/interrupt`,
+    { method: "POST" },
+  );
+
+export const getCloudAgentCommits = (id: string) =>
+  fetchJSON<{ commits: CloudAgentCommitRecord[] }>(
+    `/api/v1/agents/${encodeURIComponent(id)}/commits`,
+  );
+
+export const updateCloudAgentGitPolicy = (
+  id: string,
+  payload: {
+    auto_commit_enabled?: boolean;
+    auto_push_enabled?: boolean;
+    target_branch?: string;
+    protected_branches?: string[];
+  },
+) =>
+  fetchJSON<{ session: CloudAgentSession }>(
+    `/api/v1/agents/${encodeURIComponent(id)}/git-policy`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );

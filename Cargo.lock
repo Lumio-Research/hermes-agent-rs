@@ -1790,7 +1790,6 @@ dependencies = [
  "dirs",
  "eventsource-stream",
  "futures",
- "hermes-auth",
  "hermes-config",
  "hermes-core",
  "hermes-environments",
@@ -1843,25 +1842,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hermes-auth"
-version = "0.1.1"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "futures",
- "hermes-core",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tracing",
- "url",
- "uuid",
- "wiremock",
-]
-
-[[package]]
 name = "hermes-bus"
 version = "0.1.1"
 dependencies = [
@@ -1889,14 +1869,12 @@ dependencies = [
  "futures",
  "hermes-acp",
  "hermes-agent",
- "hermes-auth",
  "hermes-config",
  "hermes-core",
  "hermes-cron",
  "hermes-environments",
  "hermes-gateway",
  "hermes-mcp",
- "hermes-runtime",
  "hermes-server",
  "hermes-skills",
  "hermes-telemetry",
@@ -2103,28 +2081,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hermes-runtime"
-version = "0.1.1"
-dependencies = [
- "async-trait",
- "hermes-agent",
- "hermes-bus",
- "hermes-config",
- "hermes-core",
- "hermes-cron",
- "hermes-environments",
- "hermes-gateway",
- "hermes-server",
- "hermes-skills",
- "hermes-tools",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "hermes-server"
 version = "0.1.1"
 dependencies = [
@@ -2154,6 +2110,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

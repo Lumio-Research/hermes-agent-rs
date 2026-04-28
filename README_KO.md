@@ -92,7 +92,6 @@ hermes-cli                    # 바이너리 진입점, TUI, 슬래시 명령
 ├── hermes-skills             # 스킬 관리 및 Hub
 ├── hermes-cron               # Cron 스케줄링
 ├── hermes-server             # HTTP/WebSocket API 서버
-├── hermes-auth               # OAuth 토큰 교환
 ├── hermes-eval               # SWE-bench, Terminal-Bench, YC Bench
 └── hermes-telemetry          # OpenTelemetry + Prometheus
 ```

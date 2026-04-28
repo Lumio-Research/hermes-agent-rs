@@ -490,12 +490,7 @@ impl Gateway {
             let line = incoming.text.trim();
             self.emit_hook_event(
                 &format!("command:{}", command_name),
-                hook_payloads::command_context(
-                    incoming,
-                    session_key,
-                    command_name.as_str(),
-                    line,
-                ),
+                hook_payloads::command_context(incoming, session_key, command_name.as_str(), line),
             )
             .await;
         }

@@ -311,9 +311,7 @@ pub async fn delete_oauth_provider(
 }
 
 /// POST /api/providers/oauth/{provider_id}/start — stub device-code session (not a real OAuth server).
-pub async fn oauth_start(
-    AxumPath(provider_id): AxumPath<String>,
-) -> Json<serde_json::Value> {
+pub async fn oauth_start(AxumPath(provider_id): AxumPath<String>) -> Json<serde_json::Value> {
     Json(json!({
         "session_id": format!("stub-{provider_id}"),
         "flow": "device_code",
@@ -359,8 +357,6 @@ pub async fn oauth_poll(
 }
 
 /// DELETE /api/providers/oauth/sessions/{session_id}
-pub async fn oauth_cancel_session(
-    AxumPath(_session_id): AxumPath<String>,
-) -> Json<OkResponse> {
+pub async fn oauth_cancel_session(AxumPath(_session_id): AxumPath<String>) -> Json<OkResponse> {
     Json(OkResponse { ok: true })
 }

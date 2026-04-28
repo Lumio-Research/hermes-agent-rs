@@ -119,7 +119,10 @@ fn slash_extensions() -> &'static RwLock<Vec<Arc<dyn SlashCommandExtension>>> {
 
 /// Register an in-process slash command handler (process-wide, idempotent-safe to call at startup).
 pub fn register_slash_command_extension(ext: Arc<dyn SlashCommandExtension>) {
-    slash_extensions().write().expect("slash extensions poisoned").push(ext);
+    slash_extensions()
+        .write()
+        .expect("slash extensions poisoned")
+        .push(ext);
 }
 
 fn build_help_text() -> String {
@@ -555,7 +558,9 @@ mod tests {
 
     #[test]
     fn slash_extension_dispatches_before_builtin_and_merges_help() {
-        let _g = SLASH_EXT_TEST_LOCK.lock().expect("slash ext test lock poisoned");
+        let _g = SLASH_EXT_TEST_LOCK
+            .lock()
+            .expect("slash ext test lock poisoned");
         struct E;
         impl SlashCommandExtension for E {
             fn try_dispatch(&self, cmd: &str, args: &str) -> Option<GatewayCommandResult> {
