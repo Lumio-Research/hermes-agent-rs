@@ -2,6 +2,7 @@
 resolver = "2"
 exclude = []
 members = [
+    "crates/hermes-transport",
     "crates/hermes-core",
     "crates/hermes-agent",
     "crates/hermes-tools",
@@ -19,7 +20,6 @@ members = [
     "crates/hermes-telemetry",
     "crates/hermes-parity-tests",
     "crates/hermes-bus",
-    "apps/client/src-tauri",
 ]
 
 [workspace.package]
@@ -31,6 +31,7 @@ repository = "https://github.com/nousresearch/hermes-engine"
 [workspace.dependencies]
 # Internal crates
 hermes-core = { path = "crates/hermes-core" }
+hermes-transport = { path = "crates/hermes-transport" }
 hermes-agent = { path = "crates/hermes-agent" }
 hermes-tools = { path = "crates/hermes-tools" }
 hermes-gateway = { path = "crates/hermes-gateway" }

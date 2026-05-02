@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Hermes",
+    "slug": "hermes-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "com.hermes.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.hermes.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0e14"
+      }
+    },
+    "scheme": "hermes"
+  }
+}

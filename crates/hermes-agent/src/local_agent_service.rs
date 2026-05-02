@@ -34,6 +34,16 @@ pub struct LocalAgentService {
 pub type ProviderFactory = Arc<dyn Fn(&GatewayConfig, &str) -> Arc<dyn LlmProvider> + Send + Sync>;
 
 impl LocalAgentService {
+    fn fallback_model(&self) -> String {
+        if self.config.llm_providers.contains_key("openrouter") {
+            return "openrouter:deepseek/deepseek-chat-v3-0324".to_string();
+        }
+        if self.config.llm_providers.contains_key("anthropic") {
+            return "claude-3-5-sonnet-latest".to_string();
+        }
+        "gpt-4o".to_string()
+    }
+
     /// Create a new `LocalAgentService`.
     pub fn new(
         config: Arc<GatewayConfig>,
@@ -126,7 +136,7 @@ impl AgentService for LocalAgentService {
             .model
             .clone()
             .or_else(|| self.config.model.clone())
-            .unwrap_or_else(|| "gpt-4o".to_string());
+            .unwrap_or_else(|| self.fallback_model());
 
         let effective_personality = overrides
             .personality
@@ -197,7 +207,7 @@ impl AgentService for LocalAgentService {
             .model
             .clone()
             .or_else(|| self.config.model.clone())
-            .unwrap_or_else(|| "gpt-4o".to_string());
+            .unwrap_or_else(|| self.fallback_model());
 
         let effective_personality = overrides
             .personality

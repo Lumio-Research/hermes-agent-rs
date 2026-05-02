@@ -1,0 +1,56 @@
+{
+  "name": "hermes-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "electron/dist/main.js",
+  "scripts": {
+    "dev": "vite",
+    "dev:web": "vite",
+    "dev:desktop": "NODE_ENV=development tsx electron/src/main.ts",
+    "build": "pnpm build:web",
+    "build:web": "tsc && vite build",
+    "build:desktop": "tsc -p electron/tsconfig.json",
+    "preview": "vite preview",
+    "start:desktop": "electron electron/dist/main.js",
+    "dist:desktop": "pnpm build:web && pnpm build:desktop && electron-builder -c electron/electron-builder.config.cjs -mwl",
+    "dist:linux": "pnpm build:web && pnpm build:desktop && electron-builder -c electron/electron-builder.config.cjs --linux",
+    "dist:mac": "pnpm build:web && pnpm build:desktop && electron-builder -c electron/electron-builder.config.cjs --mac",
+    "dist:win": "pnpm build:web && pnpm build:desktop && electron-builder -c electron/electron-builder.config.cjs --win",
+    "dist:github": "HERMES_UPDATE_PROVIDER=github pnpm dist:desktop",
+    "dist:s3": "HERMES_UPDATE_PROVIDER=s3 pnpm dist:desktop"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "electron-log": "^5.2.4",
+    "electron-updater": "^6.3.9",
+    "lucide-react": "^0.511.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.6.0",
+    "react-syntax-highlighter": "^15.6.1",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.4",
+    "@types/node": "^22.15.17",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "@vitejs/plugin-react": "^4.5.2",
+    "autoprefixer": "^10.4.21",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.5.4",
+    "tailwindcss": "^4.1.7",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

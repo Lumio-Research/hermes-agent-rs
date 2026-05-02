@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 hermes-core = { workspace = true }
+hermes-transport = { workspace = true }
 hermes-agent = { workspace = true }
 hermes-tools = { workspace = true }
 hermes-config = { workspace = true }

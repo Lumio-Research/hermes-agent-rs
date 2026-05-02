@@ -1,0 +1,18 @@
+{
+  "name": "@hermes/app-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "sync:protocol": "node scripts/sync-protocol-schema.mjs",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test dist/*.test.js",
+    "test:e2e": "node --test dist/e2e.smoke.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "typescript": "^5.8.3"
+  }
+}

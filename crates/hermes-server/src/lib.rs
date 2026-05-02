@@ -29,8 +29,13 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
 use futures::StreamExt;
+use hermes_transport::{
+    CreateSessionRequest, ListSessionsResponse, ProtocolMessage, RenameSessionRequest,
+    SendMessageRequest, SendMessageResponse, SessionMessagesResponse, SessionSummary, StreamEvent,
+    WsEnvelope,
+};
 use hermes_config::GatewayConfig;
-use hermes_core::{AgentError, StreamChunk};
+use hermes_core::{AgentError, Message, MessageRole, StreamChunk};
 use hermes_tools::ToolRegistry;
 use serde::{Deserialize, Serialize};
 use tower::service_fn;
@@ -170,23 +175,6 @@ pub struct HealthResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SendMessageRequest {
-    pub text: String,
-    pub model: Option<String>,
-    pub provider: Option<String>,
-    pub personality: Option<String>,
-    #[serde(default)]
-    pub user_id: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SendMessageResponse {
-    pub session_id: String,
-    pub reply: String,
-    pub message_count: usize,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct CommandRequest {
     pub command: String,
     #[serde(default)]
@@ -199,6 +187,19 @@ pub struct CommandRequest {
 pub struct CommandResponse {
     pub accepted: bool,
     pub output: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClientTelemetryEvent {
+    pub runtime: String,
+    pub level: String,
+    pub message: String,
+    #[serde(default)]
+    pub app_version: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    #[serde(default)]
+    pub tags: Option<serde_json::Value>,
 }
 
 fn max_request_body_bytes() -> usize {
@@ -268,8 +269,18 @@ pub fn router(state: HttpServerState) -> Router {
 
     let mut app = Router::new()
         .route("/health", get(health))
+        .route("/v1/protocol/schema", get(protocol_schema))
+        .route("/v1/telemetry/client-event", post(client_telemetry_event))
         .route("/metrics", get(metrics_prometheus))
-        .route("/v1/sessions/{session_id}/messages", post(send_message))
+        .route("/v1/sessions", get(list_sessions).post(create_session))
+        .route(
+            "/v1/sessions/{session_id}",
+            post(rename_session).delete(delete_session),
+        )
+        .route(
+            "/v1/sessions/{session_id}/messages",
+            get(get_session_messages).post(send_message),
+        )
         .route("/v1/commands", post(exec_command))
         .route("/v1/ws/{session_id}", get(ws_upgrade))
         .route("/v1/ws-stream/{session_id}", get(ws_stream_upgrade))
@@ -385,12 +396,205 @@ async fn metrics_prometheus() -> impl IntoResponse {
     )
 }
 
+async fn protocol_schema() -> impl IntoResponse {
+    Json(serde_json::json!({
+        "version": 1,
+        "ws_envelope": hermes_transport::ws_schema_json()
+    }))
+}
+
+async fn client_telemetry_event(
+    Json(event): Json<ClientTelemetryEvent>,
+) -> Result<Json<serde_json::Value>, HttpError> {
+    match event.level.as_str() {
+        "error" => tracing::error!(
+            runtime = %event.runtime,
+            message = %event.message,
+            app_version = ?event.app_version,
+            trace_id = ?event.trace_id,
+            tags = ?event.tags,
+            "client telemetry event"
+        ),
+        "warn" => tracing::warn!(
+            runtime = %event.runtime,
+            message = %event.message,
+            app_version = ?event.app_version,
+            trace_id = ?event.trace_id,
+            tags = ?event.tags,
+            "client telemetry event"
+        ),
+        _ => tracing::info!(
+            runtime = %event.runtime,
+            message = %event.message,
+            app_version = ?event.app_version,
+            trace_id = ?event.trace_id,
+            tags = ?event.tags,
+            "client telemetry event"
+        ),
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+async fn list_sessions(State(state): State<HttpServerState>) -> Json<ListSessionsResponse> {
+    let db_path = state.hermes_home.join("sessions.db");
+    let conn = match rusqlite::Connection::open(db_path) {
+        Ok(conn) => conn,
+        Err(_) => {
+            return Json(ListSessionsResponse {
+                sessions: vec![],
+                total: 0,
+            });
+        }
+    };
+    let mut stmt = match conn.prepare(
+        "SELECT id, title, created_at, updated_at, message_count FROM sessions ORDER BY updated_at DESC",
+    ) {
+        Ok(stmt) => stmt,
+        Err(_) => {
+            return Json(ListSessionsResponse {
+                sessions: vec![],
+                total: 0,
+            });
+        }
+    };
+    let sessions: Vec<SessionSummary> = stmt
+        .query_map([], |row| {
+            Ok(SessionSummary {
+                id: row.get::<_, String>(0)?,
+                title: row
+                    .get::<_, Option<String>>(1)?
+                    .unwrap_or_else(|| "New chat".to_string()),
+                created_at: row.get::<_, String>(2)?,
+                updated_at: row.get::<_, String>(3)?,
+                message_count: row.get::<_, i64>(4).unwrap_or(0) as usize,
+            })
+        })
+        .map(|rows| rows.filter_map(Result::ok).collect())
+        .unwrap_or_default();
+    Json(ListSessionsResponse {
+        total: sessions.len(),
+        sessions,
+    })
+}
+
+async fn create_session(
+    State(state): State<HttpServerState>,
+    Json(req): Json<CreateSessionRequest>,
+) -> Result<Json<SessionSummary>, HttpError> {
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    let title = if req.title.trim().is_empty() {
+        "New chat".to_string()
+    } else {
+        req.title
+    };
+    state
+        .session_persistence
+        .persist_session(
+            &session_id,
+            &[] as &[Message],
+            state.config.model.as_deref(),
+            Some(HTTP_PLATFORM),
+            Some(&title),
+            None,
+        )
+        .map_err(HttpError::from)?;
+    Ok(Json(SessionSummary {
+        id: session_id,
+        title,
+        created_at: now.clone(),
+        updated_at: now,
+        message_count: 0,
+    }))
+}
+
+async fn rename_session(
+    Path(session_id): Path<String>,
+    State(state): State<HttpServerState>,
+    Json(req): Json<RenameSessionRequest>,
+) -> Result<Json<serde_json::Value>, HttpError> {
+    let messages = state
+        .session_persistence
+        .load_session(&session_id)
+        .map_err(HttpError::from)?;
+    state
+        .session_persistence
+        .persist_session(
+            &session_id,
+            &messages,
+            state.config.model.as_deref(),
+            Some(HTTP_PLATFORM),
+            Some(req.title.trim()),
+            None,
+        )
+        .map_err(HttpError::from)?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+async fn delete_session(
+    Path(session_id): Path<String>,
+    State(state): State<HttpServerState>,
+) -> Result<Json<serde_json::Value>, HttpError> {
+    let db_path = state.hermes_home.join("sessions.db");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| HttpError {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        message: e.to_string(),
+    })?;
+    conn.execute(
+        "DELETE FROM messages WHERE session_id = ?1",
+        rusqlite::params![session_id],
+    )
+    .map_err(|e| HttpError {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        message: e.to_string(),
+    })?;
+    conn.execute(
+        "DELETE FROM sessions WHERE id = ?1",
+        rusqlite::params![session_id],
+    )
+    .map_err(|e| HttpError {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        message: e.to_string(),
+    })?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+async fn get_session_messages(
+    Path(session_id): Path<String>,
+    State(state): State<HttpServerState>,
+) -> Result<Json<SessionMessagesResponse>, HttpError> {
+    let messages = state
+        .session_persistence
+        .load_session(&session_id)
+        .map_err(HttpError::from)?
+        .into_iter()
+        .enumerate()
+        .map(|(idx, m)| ProtocolMessage {
+            id: format!("{}-{}", session_id, idx),
+            role: match m.role {
+                MessageRole::User => hermes_transport::Role::User,
+                MessageRole::Assistant => hermes_transport::Role::Assistant,
+                MessageRole::System => hermes_transport::Role::System,
+                MessageRole::Tool => hermes_transport::Role::Tool,
+            },
+            content: m.content.unwrap_or_default(),
+            timestamp: Utc::now().to_rfc3339(),
+            model: None,
+        })
+        .collect();
+    Ok(Json(SessionMessagesResponse {
+        session_id,
+        messages,
+    }))
+}
+
 async fn send_message(
     Path(session_id): Path<String>,
     State(state): State<HttpServerState>,
     Json(req): Json<SendMessageRequest>,
 ) -> Result<Json<SendMessageResponse>, HttpError> {
     hermes_telemetry::record_http_request();
+    let trace_id = hermes_transport::new_trace_id();
 
     // Build AgentOverrides from request
     let overrides = hermes_core::traits::AgentOverrides {
@@ -412,6 +616,7 @@ async fn send_message(
         session_id,
         reply: reply.text,
         message_count: reply.message_count,
+        trace_id,
     }))
 }
 
@@ -482,6 +687,7 @@ async fn handle_ws(mut socket: WebSocket, state: HttpServerState, session_id: St
                     provider: None,
                     personality: None,
                     user_id: None,
+                    request_id: None,
                 });
 
                 // Build AgentOverrides from request
@@ -524,33 +730,27 @@ async fn ws_stream_upgrade(
 }
 
 /// Streaming WebSocket handler.
-///
-/// Protocol:
-/// - Client sends: `{"text": "...", "user_id": "..."}` (same as SendMessageRequest)
-/// - Server pushes JSON events:
-///   `{"type": "text", "content": "token..."}`
-///   `{"type": "thinking", "content": "reasoning..."}`
-///   `{"type": "tool_start", "tool": "name", "content": "description"}`
-///   `{"type": "tool_complete", "tool": "name", "content": "result"}`
-///   `{"type": "status", "content": "message"}`
-///   `{"type": "activity", "content": "…"}` (at most once per silence for “still waiting”, then optionally once more if stalled)
-///   `{"type": "done", "content": "full_reply"}`
-///   `{"type": "error", "content": "error message"}`
 async fn handle_ws_stream(mut socket: WebSocket, state: HttpServerState, session_id: String) {
     use tokio::sync::mpsc;
-
-    // Send connected event
+    let trace_id_base = hermes_transport::new_trace_id();
+    let connected = WsEnvelope {
+        version: 1,
+        request_id: None,
+        trace_id: trace_id_base.clone(),
+        event: StreamEvent::Connected {
+            session_id: session_id.clone(),
+        },
+    };
     let _ = socket
         .send(WsMessage::Text(
-            serde_json::json!({"type": "connected", "session_id": session_id})
-                .to_string()
-                .into(),
+            serde_json::to_string(&connected).unwrap_or_default().into(),
         ))
         .await;
 
     while let Some(Ok(msg)) = socket.next().await {
         match msg {
             WsMessage::Text(text) => {
+                let trace_id = trace_id_base.clone();
                 let parsed: Option<SendMessageRequest> = serde_json::from_str(&text).ok();
                 let request = parsed.unwrap_or_else(|| SendMessageRequest {
                     text: text.to_string(),
@@ -558,6 +758,7 @@ async fn handle_ws_stream(mut socket: WebSocket, state: HttpServerState, session
                     provider: None,
                     personality: None,
                     user_id: None,
+                    request_id: None,
                 });
 
                 // Build AgentOverrides from request
@@ -566,17 +767,28 @@ async fn handle_ws_stream(mut socket: WebSocket, state: HttpServerState, session
                     personality: request.personality.clone(),
                 };
 
-                // Create a simple streaming callback that forwards text chunks
-                let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+                // Create a bounded queue to avoid unbounded memory usage under slow clients.
+                let queue_cap = std::env::var("HERMES_WS_STREAM_BUFFER")
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .filter(|v| *v > 0)
+                    .unwrap_or(128);
+                let (tx, mut rx) = mpsc::channel::<WsEnvelope>(queue_cap);
                 let tx_clone = tx.clone();
+                let request_id = request.request_id.clone();
+                let trace_id_for_stream = trace_id.clone();
                 let on_chunk = Arc::new(move |chunk: StreamChunk| {
                     if let Some(delta) = &chunk.delta {
                         if let Some(text) = &delta.content {
                             if !text.is_empty() {
-                                let _ = tx_clone.send(
-                                    serde_json::json!({"type": "text", "content": text})
-                                        .to_string(),
-                                );
+                                let _ = tx_clone.try_send(WsEnvelope {
+                                    version: 1,
+                                    request_id: request_id.clone(),
+                                    trace_id: trace_id_for_stream.clone(),
+                                    event: StreamEvent::Text {
+                                        content: redact_sensitive(text),
+                                    },
+                                });
                             }
                         }
                     }
@@ -593,16 +805,29 @@ async fn handle_ws_stream(mut socket: WebSocket, state: HttpServerState, session
                         .await
                     {
                         Ok(reply) => {
-                            let _ = tx.send(
-                                serde_json::json!({"type": "done", "content": reply.text})
-                                    .to_string(),
-                            );
+                            let _ = tx
+                                .send(WsEnvelope {
+                                    version: 1,
+                                    request_id: request.request_id.clone(),
+                                    trace_id: trace_id.clone(),
+                                    event: StreamEvent::Done {
+                                        content: redact_sensitive(&reply.text),
+                                    },
+                                })
+                                .await;
                         }
                         Err(e) => {
-                            let _ = tx.send(
-                                serde_json::json!({"type": "error", "content": e.to_string()})
-                                    .to_string(),
-                            );
+                            let _ = tx
+                                .send(WsEnvelope {
+                                    version: 1,
+                                    request_id: request.request_id.clone(),
+                                    trace_id: trace_id.clone(),
+                                    event: StreamEvent::Error {
+                                        code: "agent_error".to_string(),
+                                        message: redact_sensitive(&e.to_string()),
+                                    },
+                                })
+                                .await;
                         }
                     }
                 });
@@ -610,7 +835,11 @@ async fn handle_ws_stream(mut socket: WebSocket, state: HttpServerState, session
                 // Forward channel events to WebSocket
                 while let Some(event_json) = rx.recv().await {
                     if socket
-                        .send(WsMessage::Text(event_json.into()))
+                        .send(WsMessage::Text(
+                            serde_json::to_string(&event_json)
+                                .unwrap_or_default()
+                                .into(),
+                        ))
                         .await
                         .is_err()
                     {
@@ -622,6 +851,21 @@ async fn handle_ws_stream(mut socket: WebSocket, state: HttpServerState, session
             _ => {}
         }
     }
+}
+
+fn redact_sensitive(input: &str) -> String {
+    let mut out = input.to_string();
+    let patterns = [
+        ("sk-", "sk-***"),
+        ("ghp_", "ghp_***"),
+        ("xoxb-", "xoxb-***"),
+    ];
+    for (needle, replacement) in patterns {
+        if out.contains(needle) {
+            out = out.replace(needle, replacement);
+        }
+    }
+    out
 }
 
 #[derive(Debug)]

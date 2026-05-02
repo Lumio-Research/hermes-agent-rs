@@ -2,7 +2,7 @@
 
 Browser-based admin dashboard for operators and maintainers. It is used for platform management (status, logs, sessions, config, analytics, cron, skills, keys).
 
-Cloud Agent end-user chat/create flows are intentionally hosted in `apps/client`, not in this dashboard.
+Cloud Agent end-user chat/create flows are intentionally hosted in `apps/web-app`, not in this dashboard.
 
 ## Stack
 

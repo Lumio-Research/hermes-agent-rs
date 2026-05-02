@@ -115,7 +115,8 @@ hermes-agent-rs/
 │   └── hermes-telemetry        # OpenTelemetry + Prometheus
 ├── apps/
 │   ├── dashboard/              # Web management UI (React + Vite + Tailwind)
-│   └── client/                 # Cross-platform client (Tauri 2 — macOS/Windows/Linux/iOS/Android)
+│   ├── web-app/                # Web app + Electron desktop shell (macOS/Windows/Linux)
+│   └── mobile-app/             # Mobile client (Flutter — iOS/Android)
 └── scripts/                    # Install, CI, and convenience scripts
 ```
 
@@ -197,12 +198,59 @@ npm install
 npm run dev          # Vite dev server with HMR, proxies /api to hermes serve
 ```
 
-**Client app** (Tauri cross-platform):
+**Client app** (Web + Desktop shared project):
 
 ```bash
-cd apps/client
+cd apps/web-app
 pnpm install
-pnpm tauri dev       # Launches Tauri dev window
+pnpm dev:web
+```
+
+**Electron desktop shell** (Linux / macOS / Windows):
+
+```bash
+cd apps/web-app
+pnpm dev:desktop
+```
+
+Package artifacts:
+
+```bash
+pnpm dist
+```
+
+Parity checklist is tracked in `apps/web-app/electron/TAURI_PARITY.md`.
+
+**Mobile app** (React Native + Expo — iOS / Android):
+
+```bash
+cd apps/mobile-app
+pnpm install
+pnpm ios            # iOS simulator
+pnpm android        # Android emulator
+pnpm start          # Expo dev server (Expo Go)
+```
+
+Shares types and API client with `apps/web-app`. Features:
+- Session list + new chat
+- Streaming chat via WebSocket
+- Settings (API URL, token) persisted with AsyncStorage
+
+**Protocol SDK** (IDE / external client integration):
+
+```bash
+cd sdk/typescript
+pnpm install
+pnpm build
+pnpm test            # protocol contract tests
+HERMES_E2E_BASE=http://127.0.0.1:8787 pnpm test:e2e
+HERMES_SCHEMA_BASE=http://127.0.0.1:8787 pnpm sync:protocol
+```
+
+**One-command local protocol e2e** (auto start/stop `hermes-server`):
+
+```bash
+bash scripts/ci/protocol-e2e-local.sh
 ```
 
 ## Contributing
@@ -220,6 +268,11 @@ Contributions welcome. Before submitting a PR:
    ```bash
    bash scripts/ci/smoke.sh          # Release binary smoke check
    bash scripts/ci/keypath-e2e.sh    # Core end-to-end paths
+   bash scripts/ci/protocol-sdk-check.sh   # Protocol SDK contracts + optional e2e smoke
+   bash scripts/ci/protocol-e2e-local.sh   # Local server + protocol SDK e2e smoke
+   bash scripts/ci/electron-check.sh       # Electron shell build check
+   bash scripts/ci/mobile-check.sh         # React Native type check + tests
+   bash scripts/ci/protocol-matrix-check.sh # Rust↔TS↔Flutter protocol fixtures compatibility
    ```
 
 3. If you changed `apps/dashboard`:
@@ -228,6 +281,7 @@ Contributions welcome. Before submitting a PR:
    ```
 
 See [AGENTS.md](AGENTS.md) for architecture details and coding conventions.
+For multi-client CI/CD operations, see [CI_CD_RUNBOOK.md](CI_CD_RUNBOOK.md).
 
 ## License
 

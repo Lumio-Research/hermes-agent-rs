@@ -217,6 +217,21 @@ fn client_key(req: &Request<Body>) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
+fn query_bearer_token(req: &Request<Body>) -> Option<String> {
+    req.uri().query().and_then(|query| {
+        query.split('&').find_map(|pair| {
+            let mut iter = pair.splitn(2, '=');
+            let key = iter.next()?;
+            let value = iter.next().unwrap_or_default();
+            if key == "token" && !value.trim().is_empty() {
+                Some(value.to_string())
+            } else {
+                None
+            }
+        })
+    })
+}
+
 fn client_ip(req: &Request<Body>) -> Option<IpAddr> {
     req.extensions()
         .get::<ConnectInfo<SocketAddr>>()
@@ -264,12 +279,15 @@ pub async fn request_guard(
     }
 
     if let Some(key) = security.api_key.as_ref() {
-        let token = req
+        let header_token = req
             .headers()
             .get(AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer ").map(str::trim));
-        let ok = token == Some(key.as_ref());
+        let token = header_token
+            .map(std::string::ToString::to_string)
+            .or_else(|| query_bearer_token(&req));
+        let ok = token.as_deref() == Some(key.as_ref());
         if !ok {
             hermes_telemetry::record_http_reject();
             return (
