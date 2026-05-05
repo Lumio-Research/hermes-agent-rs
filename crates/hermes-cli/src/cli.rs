@@ -93,9 +93,11 @@ pub enum CliCommand {
     ///   hermes cloud list --limit 20                 — list recent cloud agents
     ///   hermes cloud exec --agent-id <id> "Fix lint errors"
     ///   hermes cloud status --agent-id <id>          — get cloud agent status
+    ///   hermes cloud logs --agent-id <id>            — tail messages (Ctrl-C to stop)
+    ///   hermes cloud logs --agent-id <id> --once     — print existing messages and exit
     Cloud {
-        /// Action: "list", "exec", "status", "login", "logout", or "whoami"
-        /// (defaults to "list").
+        /// Action: "list", "exec", "status", "logs", "login", "logout", or
+        /// "whoami" (defaults to "list").
         action: Option<String>,
         /// Target cloud agent id (required for status, optional for exec).
         #[arg(long)]
@@ -121,6 +123,12 @@ pub enum CliCommand {
         /// Treat `login` request as a registration (POST /api/v1/auth/register).
         #[arg(long)]
         register: bool,
+        /// For `logs`: print existing messages once and exit (no follow).
+        #[arg(long)]
+        once: bool,
+        /// For `logs`: poll interval in seconds (defaults to 2).
+        #[arg(long = "interval", default_value_t = 2)]
+        poll_interval_secs: u64,
         /// Max rows for "list".
         #[arg(long, default_value_t = 20)]
         limit: u32,

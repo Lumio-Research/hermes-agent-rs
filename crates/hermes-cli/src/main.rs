@@ -178,6 +178,8 @@ async fn main() {
             password,
             url_override,
             register,
+            once,
+            poll_interval_secs,
             limit,
             json,
         } => {
@@ -191,6 +193,8 @@ async fn main() {
                 password,
                 url_override,
                 register,
+                once,
+                poll_interval_secs,
                 limit,
                 json,
             )
@@ -2294,6 +2298,8 @@ async fn run_cloud(
     password: Option<String>,
     url_override: Option<String>,
     register: bool,
+    once: bool,
+    poll_interval_secs: u64,
     limit: u32,
     json: bool,
 ) -> Result<(), AgentError> {
@@ -2337,6 +2343,23 @@ async fn run_cloud(
         }
         "whoami" => {
             return cloud_whoami(&client, &base_url, token.as_deref()).await;
+        }
+        "logs" => {
+            let id = agent_id.ok_or_else(|| {
+                AgentError::Config(
+                    "Missing --agent-id. Usage: hermes cloud logs --agent-id <id>".into(),
+                )
+            })?;
+            return cloud_logs(
+                &client,
+                &base_url,
+                token.as_deref(),
+                &id,
+                once,
+                poll_interval_secs,
+                json,
+            )
+            .await;
         }
         _ => {}
     }
@@ -2540,8 +2563,8 @@ async fn run_cloud(
             Ok(())
         }
         other => Err(AgentError::Config(format!(
-            "Unknown cloud action: {}. Use 'list', 'exec', 'status', 'login', \
-             'logout', or 'whoami'.",
+            "Unknown cloud action: {}. Use 'list', 'exec', 'status', 'logs', \
+             'login', 'logout', or 'whoami'.",
             other
         ))),
     }
@@ -2646,6 +2669,89 @@ fn cloud_logout() -> Result<(), AgentError> {
         println!("No cloud credential cached.");
     }
     Ok(())
+}
+
+async fn cloud_logs(
+    client: &reqwest::Client,
+    base_url: &str,
+    token: Option<&str>,
+    agent_id: &str,
+    once: bool,
+    poll_interval_secs: u64,
+    json: bool,
+) -> Result<(), AgentError> {
+    let endpoint = format!(
+        "{}/api/v1/agents/{}/messages",
+        base_url.trim_end_matches('/'),
+        agent_id
+    );
+    let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let interval = std::time::Duration::from_secs(poll_interval_secs.max(1));
+    let mut iteration = 0u64;
+    loop {
+        iteration += 1;
+        let mut req = client.get(&endpoint);
+        if let Some(t) = token {
+            req = req.bearer_auth(t);
+        }
+        let res = req
+            .send()
+            .await
+            .map_err(|e| AgentError::Io(format!("cloud logs request failed: {}", e)))?;
+        if !res.status().is_success() {
+            let status = res.status();
+            let body = res.text().await.unwrap_or_default();
+            return Err(AgentError::Io(format!(
+                "cloud logs failed ({}): {}",
+                status, body
+            )));
+        }
+        let data: serde_json::Value = res
+            .json()
+            .await
+            .map_err(|e| AgentError::Io(format!("cloud logs parse failed: {}", e)))?;
+        let messages = data
+            .get("messages")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        for msg in messages.iter() {
+            let id = msg
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if !id.is_empty() && !seen_ids.insert(id.clone()) {
+                continue;
+            }
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string(msg).unwrap_or_else(|_| msg.to_string())
+                );
+                continue;
+            }
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("?");
+            let created = msg
+                .get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            let prefix = match role {
+                "user" => "↑",
+                "assistant" => "↓",
+                _ => "•",
+            };
+            println!("{} [{}] {}: {}", prefix, created, role, content);
+        }
+        if once {
+            if iteration == 1 && messages.is_empty() {
+                println!("(no messages yet)");
+            }
+            return Ok(());
+        }
+        tokio::time::sleep(interval).await;
+    }
 }
 
 async fn cloud_whoami(
