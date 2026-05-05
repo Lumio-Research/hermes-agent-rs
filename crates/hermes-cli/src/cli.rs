@@ -86,12 +86,16 @@ pub enum CliCommand {
     /// Interact with cloud tasks from the terminal.
     ///
     /// Examples:
-    ///   hermes cloud                           — list recent cloud agents
-    ///   hermes cloud list --limit 20          — list recent cloud agents
+    ///   hermes cloud login --email me@example.com    — store cloud bearer
+    ///   hermes cloud whoami                          — show signed-in identity
+    ///   hermes cloud logout                          — drop stored bearer
+    ///   hermes cloud                                 — list recent cloud agents
+    ///   hermes cloud list --limit 20                 — list recent cloud agents
     ///   hermes cloud exec --agent-id <id> "Fix lint errors"
-    ///   hermes cloud status --agent-id <id>   — get cloud agent status
+    ///   hermes cloud status --agent-id <id>          — get cloud agent status
     Cloud {
-        /// Action: "list", "exec", or "status" (defaults to "list").
+        /// Action: "list", "exec", "status", "login", "logout", or "whoami"
+        /// (defaults to "list").
         action: Option<String>,
         /// Target cloud agent id (required for status, optional for exec).
         #[arg(long)]
@@ -104,6 +108,19 @@ pub enum CliCommand {
         /// Best-of-N attempt count for cloud execution (1-4, parity placeholder).
         #[arg(long)]
         attempts: Option<u8>,
+        /// Email used for `login` (will prompt if missing).
+        #[arg(long)]
+        email: Option<String>,
+        /// Password used for `login` (will prompt if missing).
+        #[arg(long)]
+        password: Option<String>,
+        /// Override base URL for `login`. Defaults to HERMES_CLOUD_API_URL or
+        /// the URL stored from a previous login.
+        #[arg(long = "url")]
+        url_override: Option<String>,
+        /// Treat `login` request as a registration (POST /api/v1/auth/register).
+        #[arg(long)]
+        register: bool,
         /// Max rows for "list".
         #[arg(long, default_value_t = 20)]
         limit: u32,
@@ -493,6 +510,7 @@ mod tests {
                 attempts,
                 limit,
                 json,
+                ..
             }) => {
                 assert_eq!(action.as_deref(), Some("exec"));
                 assert_eq!(agent_id.as_deref(), Some("agent-123"));

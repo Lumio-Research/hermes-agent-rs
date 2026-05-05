@@ -174,9 +174,28 @@ async fn main() {
             prompt,
             env,
             attempts,
+            email,
+            password,
+            url_override,
+            register,
             limit,
             json,
-        } => run_cloud(action, agent_id, prompt, env, attempts, limit, json).await,
+        } => {
+            run_cloud(
+                action,
+                agent_id,
+                prompt,
+                env,
+                attempts,
+                email,
+                password,
+                url_override,
+                register,
+                limit,
+                json,
+            )
+            .await
+        }
         CliCommand::Completion { shell } => run_completion(shell),
         CliCommand::Uninstall { yes } => run_uninstall(yes).await,
     };
@@ -2202,22 +2221,99 @@ async fn run_serve(
     }
 }
 
+/// Persistent cloud credential cached on disk.
+///
+/// Mirrors the response from `/api/v1/auth/login` and the user's chosen base
+/// URL so subsequent `hermes cloud ...` invocations don't need any env vars.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct StoredCloudCredential {
+    base_url: String,
+    access_token: String,
+    #[serde(default)]
+    email: Option<String>,
+    #[serde(default)]
+    user_id: Option<String>,
+    #[serde(default)]
+    tenant_id: Option<String>,
+    #[serde(default)]
+    expires_in: Option<u64>,
+    #[serde(default)]
+    saved_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+fn cloud_credential_path() -> PathBuf {
+    hermes_config::hermes_home().join("cloud_credentials.json")
+}
+
+fn load_cloud_credential() -> Option<StoredCloudCredential> {
+    let path = cloud_credential_path();
+    let raw = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn save_cloud_credential(cred: &StoredCloudCredential) -> Result<(), AgentError> {
+    let path = cloud_credential_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| AgentError::Io(format!("create config dir: {}", e)))?;
+    }
+    let body = serde_json::to_string_pretty(cred)
+        .map_err(|e| AgentError::Config(format!("serialize credential: {}", e)))?;
+    std::fs::write(&path, body)
+        .map_err(|e| AgentError::Io(format!("write {}: {}", path.display(), e)))?;
+    // Restrict permissions on Unix-y systems.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(&path) {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o600);
+            let _ = std::fs::set_permissions(&path, perms);
+        }
+    }
+    Ok(())
+}
+
+fn clear_cloud_credential() -> Result<bool, AgentError> {
+    let path = cloud_credential_path();
+    if !path.exists() {
+        return Ok(false);
+    }
+    std::fs::remove_file(&path)
+        .map_err(|e| AgentError::Io(format!("remove {}: {}", path.display(), e)))?;
+    Ok(true)
+}
+
 async fn run_cloud(
     action: Option<String>,
     agent_id: Option<String>,
     prompt: Option<String>,
     env: Option<String>,
     attempts: Option<u8>,
+    email: Option<String>,
+    password: Option<String>,
+    url_override: Option<String>,
+    register: bool,
     limit: u32,
     json: bool,
 ) -> Result<(), AgentError> {
     let action = action.unwrap_or_else(|| "list".to_string());
+
+    // Resolution order (highest to lowest):
+    //   env: HERMES_CLOUD_API_URL / HERMES_CLOUD_BASE_URL
+    //   stored credential: ~/.hermes/cloud_credentials.json (from `cloud login`)
+    //   default: http://127.0.0.1:8787
+    let stored = load_cloud_credential();
     let base_url = std::env::var("HERMES_CLOUD_API_URL")
-        .or_else(|_| std::env::var("HERMES_CLOUD_BASE_URL"))
-        .unwrap_or_else(|_| "http://127.0.0.1:8787".to_string());
+        .ok()
+        .or_else(|| std::env::var("HERMES_CLOUD_BASE_URL").ok())
+        .or_else(|| stored.as_ref().map(|c| c.base_url.clone()))
+        .or_else(|| url_override.clone())
+        .unwrap_or_else(|| "http://127.0.0.1:8787".to_string());
     let token = std::env::var("HERMES_CLOUD_TOKEN")
         .ok()
-        .or_else(|| std::env::var("HERMES_AUTH_TOKEN").ok());
+        .or_else(|| std::env::var("HERMES_AUTH_TOKEN").ok())
+        .or_else(|| stored.as_ref().map(|c| c.access_token.clone()));
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(45))
@@ -2231,6 +2327,19 @@ async fn run_cloud(
             req
         }
     };
+
+    match action.as_str() {
+        "login" => {
+            return cloud_login(&client, url_override, email, password, register).await;
+        }
+        "logout" => {
+            return cloud_logout();
+        }
+        "whoami" => {
+            return cloud_whoami(&client, &base_url, token.as_deref()).await;
+        }
+        _ => {}
+    }
 
     match action.as_str() {
         "list" => {
@@ -2431,10 +2540,149 @@ async fn run_cloud(
             Ok(())
         }
         other => Err(AgentError::Config(format!(
-            "Unknown cloud action: {}. Use 'list', 'exec', or 'status'.",
+            "Unknown cloud action: {}. Use 'list', 'exec', 'status', 'login', \
+             'logout', or 'whoami'.",
             other
         ))),
     }
+}
+
+async fn cloud_login(
+    client: &reqwest::Client,
+    url_override: Option<String>,
+    email: Option<String>,
+    password: Option<String>,
+    register: bool,
+) -> Result<(), AgentError> {
+    let stored = load_cloud_credential();
+    let base_url = url_override
+        .or_else(|| std::env::var("HERMES_CLOUD_API_URL").ok())
+        .or_else(|| std::env::var("HERMES_CLOUD_BASE_URL").ok())
+        .or_else(|| stored.as_ref().map(|c| c.base_url.clone()))
+        .unwrap_or_else(|| "http://127.0.0.1:8787".to_string());
+
+    let email = match email {
+        Some(v) if !v.trim().is_empty() => v.trim().to_string(),
+        _ => prompt_line("Email: ").await?,
+    };
+    if email.is_empty() {
+        return Err(AgentError::Config("email is required".into()));
+    }
+    let password = match password {
+        Some(v) if !v.is_empty() => v,
+        _ => prompt_line("Password: ").await?,
+    };
+    if password.is_empty() {
+        return Err(AgentError::Config("password is required".into()));
+    }
+
+    let endpoint = if register {
+        format!("{}/api/v1/auth/register", base_url.trim_end_matches('/'))
+    } else {
+        format!("{}/api/v1/auth/login", base_url.trim_end_matches('/'))
+    };
+    let body = serde_json::json!({ "email": email, "password": password });
+    let res = client
+        .post(&endpoint)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| AgentError::Io(format!("cloud {} request failed: {}",
+            if register { "register" } else { "login" }, e)))?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(AgentError::Io(format!(
+            "cloud {} failed ({}): {}",
+            if register { "register" } else { "login" },
+            status,
+            text
+        )));
+    }
+    let data: serde_json::Value = res
+        .json()
+        .await
+        .map_err(|e| AgentError::Io(format!("cloud login response parse failed: {}", e)))?;
+    let token = data
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AgentError::Io("cloud login response missing access_token".into()))?
+        .to_string();
+    let user = data.get("user");
+    let cred = StoredCloudCredential {
+        base_url: base_url.trim_end_matches('/').to_string(),
+        access_token: token,
+        email: user
+            .and_then(|u| u.get("email"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or(Some(email.clone())),
+        user_id: user
+            .and_then(|u| u.get("id"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        tenant_id: user
+            .and_then(|u| u.get("tenant_id"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        expires_in: data.get("expires_in").and_then(|v| v.as_u64()),
+        saved_at: Some(chrono::Utc::now()),
+    };
+    save_cloud_credential(&cred)?;
+    println!(
+        "Signed in to {} as {}",
+        cred.base_url,
+        cred.email.as_deref().unwrap_or(&email)
+    );
+    println!("Credential cached at {}", cloud_credential_path().display());
+    Ok(())
+}
+
+fn cloud_logout() -> Result<(), AgentError> {
+    let removed = clear_cloud_credential()?;
+    if removed {
+        println!("Signed out (removed {})", cloud_credential_path().display());
+    } else {
+        println!("No cloud credential cached.");
+    }
+    Ok(())
+}
+
+async fn cloud_whoami(
+    client: &reqwest::Client,
+    base_url: &str,
+    token: Option<&str>,
+) -> Result<(), AgentError> {
+    let Some(token) = token else {
+        println!("Not signed in. Run `hermes cloud login` first.");
+        return Ok(());
+    };
+    let res = client
+        .get(format!(
+            "{}/api/v1/auth/me",
+            base_url.trim_end_matches('/')
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|e| AgentError::Io(format!("cloud whoami request failed: {}", e)))?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(AgentError::Io(format!(
+            "cloud whoami failed ({}): {}",
+            status, text
+        )));
+    }
+    let data: serde_json::Value = res
+        .json()
+        .await
+        .map_err(|e| AgentError::Io(format!("cloud whoami parse failed: {}", e)))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&data).unwrap_or_else(|_| data.to_string())
+    );
+    Ok(())
 }
 
 async fn run_dump(
