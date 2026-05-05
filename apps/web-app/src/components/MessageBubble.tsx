@@ -5,7 +5,7 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Copy, Check } from "lucide-react";
 import { useState } from "react";
 import type { ChatMessage } from "../types";
-import { ExecutionTimeline } from "./ExecutionTimeline";
+import { ToolEventCard } from "./ToolEventCard";
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -64,7 +64,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         )}
 
         {message.execution_timeline && message.execution_timeline.length > 0 && (
-          <ExecutionTimeline events={message.execution_timeline} />
+          <ToolEventCard events={message.execution_timeline} />
         )}
 
         {/* Tool calls (fallback) */}

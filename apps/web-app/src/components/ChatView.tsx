@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, AtSign, FolderOpen, ChevronDown, Monitor } from "lucide-react";
 import { MessageBubble } from "./MessageBubble";
+import { ChatHeader } from "./ChatHeader";
+import { StatusBar } from "./StatusBar";
+import { QuotaBanner } from "./QuotaBanner";
 import type { Session, Project } from "../types";
 
 interface ChatViewProps {
@@ -11,9 +14,37 @@ interface ChatViewProps {
   streamingText: string;
   isStreaming: boolean;
   environmentLabel?: string;
+  /// True when the active session is sandbox-backed (cloud agent).
+  isSandbox?: boolean;
+  /// Branch label for the status bar.
+  branch?: string;
+  /// Token usage percentage for the status bar / quota banner.
+  usagePct?: number;
+  /// Reset hint shown on the quota banner.
+  quotaResetHint?: string;
+  /// Click handler for the upgrade button on the quota banner.
+  onUpgrade?: () => void;
+  /// Click handler for the chat header settings icon.
+  onOpenSessionSettings?: () => void;
+  /// Click handler for the chat header share icon.
+  onShareSession?: () => void;
 }
 
-export function ChatView({ session, projects, onSendMessage, streamingText, isStreaming, environmentLabel }: ChatViewProps) {
+export function ChatView({
+  session,
+  projects,
+  onSendMessage,
+  streamingText,
+  isStreaming,
+  environmentLabel,
+  isSandbox,
+  branch,
+  usagePct,
+  quotaResetHint,
+  onUpgrade,
+  onOpenSessionSettings,
+  onShareSession,
+}: ChatViewProps) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -173,14 +204,18 @@ export function ChatView({ session, projects, onSendMessage, streamingText, isSt
   // Active chat
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-bg-primary">
-      <div className="px-8 pt-5 pb-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 text-[13px] text-text-secondary">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-text-primary leading-6">{session.title || "New chat"}</span>
-            <span className="text-text-muted leading-6">···</span>
-          </div>
-        </div>
-      </div>
+      <ChatHeader
+        session={session}
+        onOpenSettings={onOpenSessionSettings}
+        onShare={onShareSession}
+      />
+      {typeof usagePct === "number" && (
+        <QuotaBanner
+          usagePct={usagePct}
+          resetHint={quotaResetHint}
+          onUpgrade={onUpgrade}
+        />
+      )}
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-8 py-3">
         <div className="max-w-4xl mx-auto space-y-5">
@@ -293,6 +328,12 @@ export function ChatView({ session, projects, onSendMessage, streamingText, isSt
           </div>
         </div>
       </div>
+      <StatusBar
+        environmentLabel={environmentLabel}
+        isSandbox={isSandbox}
+        branch={branch}
+        usagePct={usagePct}
+      />
     </div>
   );
 }
