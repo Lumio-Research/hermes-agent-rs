@@ -160,12 +160,12 @@ export const createSession = async (title: string, project?: string): Promise<Se
 };
 
 export const deleteSession = async (sessionId: string): Promise<boolean> => {
-  await fetchVoid(`/v1/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+  await fetchVoid(`/api/v1/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
   return true;
 };
 
 export const renameSession = async (sessionId: string, title: string): Promise<boolean> => {
-  await fetchVoid(`/v1/sessions/${encodeURIComponent(sessionId)}`, {
+  await fetchVoid(`/api/v1/sessions/${encodeURIComponent(sessionId)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
