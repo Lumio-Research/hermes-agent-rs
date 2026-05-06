@@ -63,6 +63,7 @@ export default function App() {
     return Number.isFinite(n) ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, n)) : 232;
   });
   const resizingSidebarRef = useRef(false);
+  const loadedSessionMessagesRef = useRef<Set<string>>(new Set());
 
   const { isStreaming, streamingContent, sendStreaming, resetStream } = useStreamChat();
 
@@ -79,6 +80,28 @@ export default function App() {
     api.getSessions().then(setSessions);
     api.getProjects().then(setProjects);
   }, []);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const session = sessions.find((s) => s.id === activeSessionId);
+    if (!session) {
+      if (sessions.length > 0) setActiveSessionId(null);
+      return;
+    }
+    if (session.messages.length > 0 || loadedSessionMessagesRef.current.has(activeSessionId)) {
+      return;
+    }
+    loadedSessionMessagesRef.current.add(activeSessionId);
+    api.getSessionMessages(activeSessionId)
+      .then((messages) => {
+        setSessions((prev) =>
+          prev.map((s) => (s.id === activeSessionId ? { ...s, messages } : s))
+        );
+      })
+      .catch(() => {
+        // Leave the session selectable even if the backend has no messages yet.
+      });
+  }, [activeSessionId, sessions, setActiveSessionId]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -184,6 +207,10 @@ export default function App() {
   const handleSendMessage = useCallback(
     async (content: string, projectId?: string) => {
       let sessionId = activeSessionId;
+      if (sessionId && !sessions.some((s) => s.id === sessionId)) {
+        sessionId = null;
+        setActiveSessionId(null);
+      }
       if (!sessionId) {
         const project = projectId ? projects.find((p) => p.id === projectId) : undefined;
         const title = content.slice(0, 40) + (content.length > 40 ? "..." : "");
@@ -519,6 +546,7 @@ export default function App() {
       projects,
       resetStream,
       sendStreaming,
+      sessions,
       shouldUseSandboxAutoRoute,
       CLOUD_AGENT_MODEL,
       CLOUD_AGENT_EXECUTION_PROFILE,

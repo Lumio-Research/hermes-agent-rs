@@ -9,17 +9,17 @@ import type {
 
 type ProtocolSessionSummary = {
   id: string;
-  title: string;
-  created_at: string;
-  updated_at: string;
-  message_count: number;
+  title?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  message_count?: number;
 };
 
 type ProtocolMessage = {
-  id: string;
+  id?: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string;
-  timestamp: string;
+  timestamp?: string;
   model?: string;
 };
 
@@ -106,25 +106,26 @@ async function fetchVoid(path: string, init?: RequestInit): Promise<void> {
 }
 
 function toSession(summary: ProtocolSessionSummary): Session {
+  const now = new Date().toISOString();
   return {
     id: summary.id,
-    title: summary.title,
-    created_at: summary.created_at,
-    updated_at: summary.updated_at,
+    title: summary.title?.trim() || "New chat",
+    created_at: summary.created_at ?? now,
+    updated_at: summary.updated_at ?? summary.created_at ?? now,
     project: undefined,
     messages: [],
   };
 }
 
-function toChatMessage(msg: ProtocolMessage): ChatMessage | null {
+function toChatMessage(msg: ProtocolMessage, fallbackId: string): ChatMessage | null {
   // Filter out system messages and tool calls — these are internal
   // configuration/context injections that should not be shown to the user.
   if (msg.role === "system" || msg.role === "tool") return null;
   return {
-    id: msg.id,
+    id: msg.id ?? fallbackId,
     role: msg.role as "user" | "assistant",
     content: msg.content,
-    timestamp: msg.timestamp,
+    timestamp: msg.timestamp ?? new Date().toISOString(),
     model: msg.model,
   };
 }
@@ -177,7 +178,9 @@ export const getSessionMessages = async (sessionId: string): Promise<ChatMessage
   const response = await fetchJSON<{ messages: ProtocolMessage[] }>(
     `/api/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
   );
-  return response.messages.map(toChatMessage).filter((m): m is ChatMessage => m !== null);
+  return response.messages
+    .map((m, index) => toChatMessage(m, `${sessionId}-${index}`))
+    .filter((m): m is ChatMessage => m !== null);
 };
 
 export const sendMessage = async (sessionId: string, content: string): Promise<ChatMessage> => {
