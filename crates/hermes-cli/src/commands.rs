@@ -3,6 +3,7 @@
 //! Defines and dispatches all supported `/` commands in the interactive
 //! REPL, and provides auto-completion suggestions.
 
+use std::cmp::Reverse;
 use std::sync::Arc;
 
 use hermes_core::AgentError;
@@ -2704,7 +2705,7 @@ pub async fn handle_cli_sessions(
                     entries.push((stem, size, modified, msg_count));
                 }
             }
-            entries.sort_by(|a, b| b.2.cmp(&a.2));
+            entries.sort_by_key(|entry| Reverse(entry.2));
             if entries.is_empty() {
                 println!("No sessions found.");
             } else {
@@ -2847,7 +2848,7 @@ pub async fn handle_cli_insights(
     if !models_used.is_empty() {
         println!("\nModels Used:");
         let mut model_vec: Vec<_> = models_used.into_iter().collect();
-        model_vec.sort_by(|a, b| b.1.cmp(&a.1));
+        model_vec.sort_by_key(|entry| Reverse(entry.1));
         for (model, count) in &model_vec {
             println!("  {:30} {:>5} session(s)", model, count);
         }

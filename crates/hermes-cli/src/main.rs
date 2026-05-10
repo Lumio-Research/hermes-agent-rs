@@ -18,10 +18,12 @@ use clap_complete::{generate, Shell as CompletionShell};
 use hermes_cli::app::provider_api_key_from_env;
 use hermes_cli::cli::{Cli, CliCommand};
 use hermes_cli::App;
+#[cfg(test)]
+use hermes_config::extra_string;
 use hermes_config::{
-    apply_user_config_patch, extra_string, gateway_pid_path_in, hermes_home, load_config,
-    load_user_config_file, platform_token_or_extra, save_config_yaml, state_dir,
-    user_config_field_display, validate_config, ConfigError, PlatformConfig,
+    apply_user_config_patch, gateway_pid_path_in, hermes_home, load_config, load_user_config_file,
+    platform_token_or_extra, save_config_yaml, state_dir, user_config_field_display,
+    validate_config, ConfigError, PlatformConfig,
 };
 use hermes_core::AgentError;
 #[cfg(test)]
@@ -75,9 +77,8 @@ async fn main() {
         }
         CliCommand::Gateway { action, platform } => {
             // "hermes gateway setup whatsapp" → delegate to whatsapp handler
-            if action.as_deref() == Some("setup") && platform.is_some() {
-                let plat = platform.unwrap();
-                match plat.as_str() {
+            if let (Some("setup"), Some(plat)) = (action.as_deref(), platform.as_deref()) {
+                match plat {
                     "whatsapp" | "wa" => {
                         hermes_cli::commands::handle_cli_whatsapp(Some("setup".to_string())).await
                     }
@@ -1004,12 +1005,9 @@ async fn register_gateway_adapters(
     gateway: Arc<Gateway>,
     sidecar_tasks: &mut Vec<tokio::task::JoinHandle<()>>,
 ) -> Result<hermes_gateway::platform_registry::RegistrationSummary, AgentError> {
-    let summary = hermes_gateway::platform_registry::register_platforms(
-        gateway.as_ref(),
-        config,
-        sidecar_tasks,
-    )
-    .await?;
+    let summary =
+        hermes_gateway::platform_registry::register_platforms(&gateway, config, sidecar_tasks)
+            .await?;
 
     #[cfg(test)]
     {

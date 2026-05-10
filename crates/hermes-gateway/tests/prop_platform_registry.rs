@@ -7,14 +7,14 @@ use hermes_gateway::platform_registry::register_platforms;
 use hermes_gateway::{DmManager, Gateway, SessionManager};
 use proptest::prelude::*;
 
-fn make_gateway() -> Gateway {
+fn make_gateway() -> Arc<Gateway> {
     let session_manager = Arc::new(SessionManager::new(SessionConfig::default()));
     let dm = DmManager::with_pair_behavior();
-    Gateway::new(
+    Arc::new(Gateway::new(
         session_manager,
         dm,
         hermes_gateway::gateway::GatewayConfig::default(),
-    )
+    ))
 }
 
 #[allow(unused_variables, unused_mut)]

@@ -125,22 +125,19 @@ pub fn run_doctor() -> Vec<CheckResult> {
 
 /// Enabled gateway platforms: credential preflight via `hermes-gateway` evaluator.
 fn check_gateway_platform_requirements(results: &mut Vec<CheckResult>) {
-    match load_config(None) {
-        Ok(cfg) => {
-            for issue in evaluate_gateway_requirements(&cfg, RequirementScope::Doctor) {
-                let name = format!("Gateway / {}", issue.platform);
-                let detail = format!("[{}] {}", issue.code, issue.message);
-                match issue.severity {
-                    RequirementSeverity::Fatal => {
-                        results.push(CheckResult::fail(name, detail));
-                    }
-                    RequirementSeverity::Warn => {
-                        results.push(CheckResult::warn(name, detail));
-                    }
+    if let Ok(cfg) = load_config(None) {
+        for issue in evaluate_gateway_requirements(&cfg, RequirementScope::Doctor) {
+            let name = format!("Gateway / {}", issue.platform);
+            let detail = format!("[{}] {}", issue.code, issue.message);
+            match issue.severity {
+                RequirementSeverity::Fatal => {
+                    results.push(CheckResult::fail(name, detail));
+                }
+                RequirementSeverity::Warn => {
+                    results.push(CheckResult::warn(name, detail));
                 }
             }
         }
-        Err(_) => {}
     }
 }
 

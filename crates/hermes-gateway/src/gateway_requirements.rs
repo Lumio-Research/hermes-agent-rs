@@ -25,8 +25,11 @@ pub fn gateway_requirement_issues(config: &GatewayConfig) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
-    use hermes_config::{GatewayConfig, PlatformConfig};
+    #[cfg(feature = "matrix")]
+    use hermes_config::GatewayConfig;
+    use hermes_config::PlatformConfig;
 
     fn make_platform(enabled: bool, token: Option<&str>) -> PlatformConfig {
         let mut cfg = PlatformConfig {

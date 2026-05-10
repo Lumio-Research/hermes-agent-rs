@@ -2,7 +2,28 @@
 //!
 //! See `.kiro/specs/unified-runtime-architecture/gateway-requirements-single-source-rfc.md`.
 
-use hermes_config::{extra_string, platform_token_or_extra, GatewayConfig};
+use hermes_config::GatewayConfig;
+#[cfg(any(
+    feature = "telegram",
+    feature = "weixin",
+    feature = "discord",
+    feature = "slack",
+    feature = "matrix",
+    feature = "mattermost",
+    feature = "signal",
+    feature = "whatsapp",
+    feature = "dingtalk",
+    feature = "feishu",
+    feature = "wecom",
+    feature = "wecom-callback",
+    feature = "qqbot",
+    feature = "bluebubbles",
+    feature = "email",
+    feature = "sms",
+    feature = "homeassistant",
+    feature = "webhook"
+))]
+use hermes_config::{extra_string, platform_token_or_extra};
 
 /// Call site / UX context for requirement evaluation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -62,6 +83,7 @@ fn push_warn(
 ///
 /// Fatal issues mirror legacy [`crate::gateway_requirement_issues`] strings.
 /// Scope currently affects optional warns (e.g. partial adapter implementations).
+#[allow(unused_mut, unused_variables)]
 pub fn evaluate_gateway_requirements(
     config: &GatewayConfig,
     scope: RequirementScope,

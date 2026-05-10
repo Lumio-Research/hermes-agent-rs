@@ -31,6 +31,27 @@ use hermes_config::GatewayConfig;
 use hermes_core::AgentError;
 
 use crate::gateway::Gateway;
+#[cfg(any(
+    feature = "telegram",
+    feature = "weixin",
+    feature = "discord",
+    feature = "slack",
+    feature = "matrix",
+    feature = "mattermost",
+    feature = "signal",
+    feature = "whatsapp",
+    feature = "dingtalk",
+    feature = "feishu",
+    feature = "wecom",
+    feature = "wecom-callback",
+    feature = "qqbot",
+    feature = "bluebubbles",
+    feature = "email",
+    feature = "sms",
+    feature = "homeassistant",
+    feature = "webhook",
+    feature = "api-server"
+))]
 use crate::platform_requirements::{
     evaluate_gateway_requirements, RequirementScope, RequirementSeverity,
 };
@@ -183,8 +204,14 @@ pub async fn register_platforms(
                             let (inbound_tx, inbound_rx) =
                                 tokio::sync::mpsc::channel::<crate::gateway::IncomingMessage>(256);
                             adapter.set_inbound_sender(inbound_tx).await;
-                            gateway
-                                .register_adapter_with_inbound("weixin", adapter.clone(), inbound_rx);
+                            let inbound_task = gateway
+                                .register_adapter_with_inbound(
+                                    "weixin",
+                                    adapter.clone(),
+                                    inbound_rx,
+                                )
+                                .await;
+                            sidecar_tasks.push(inbound_task);
                             registered.push("weixin".to_string());
                         }
                         Err(e) => errors.push(("weixin".to_string(), e.to_string())),

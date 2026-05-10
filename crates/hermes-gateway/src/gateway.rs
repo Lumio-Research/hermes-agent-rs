@@ -374,7 +374,7 @@ impl Gateway {
     ///
     /// Requires `Arc<Self>` because the spawned pump task must hold a strong
     /// reference to the gateway.
-    pub fn register_adapter_with_inbound(
+    pub async fn register_adapter_with_inbound(
         self: &Arc<Self>,
         name: impl Into<String>,
         adapter: Arc<dyn PlatformAdapter>,
@@ -382,12 +382,9 @@ impl Gateway {
     ) -> tokio::task::JoinHandle<()> {
         let name = name.into();
         info!("Registering platform adapter (inbound): {}", name);
+        self.register_adapter(name, adapter).await;
         let gw = self.clone();
-        let adapters = self.adapters.clone();
-        tokio::spawn(async move {
-            adapters.write().await.insert(name, adapter);
-            gw_pump_inbound(gw, rx).await;
-        })
+        tokio::spawn(async move { gw_pump_inbound(gw, rx).await })
     }
 
     /// Retrieve a registered platform adapter by name.
