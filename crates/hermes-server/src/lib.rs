@@ -29,14 +29,14 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
 use futures::StreamExt;
+use hermes_config::GatewayConfig;
+use hermes_core::{AgentError, Message, MessageRole, StreamChunk};
+use hermes_tools::ToolRegistry;
 use hermes_transport::{
     CreateSessionRequest, ListSessionsResponse, ProtocolMessage, RenameSessionRequest,
     SendMessageRequest, SendMessageResponse, SessionMessagesResponse, SessionSummary, StreamEvent,
     WsEnvelope,
 };
-use hermes_config::GatewayConfig;
-use hermes_core::{AgentError, Message, MessageRole, StreamChunk};
-use hermes_tools::ToolRegistry;
 use serde::{Deserialize, Serialize};
 use tower::service_fn;
 use tower_http::cors::{AllowHeaders, AllowOrigin, CorsLayer};

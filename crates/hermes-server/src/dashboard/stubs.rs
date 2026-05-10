@@ -36,17 +36,9 @@ impl Default for DashboardPluginSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct DashboardPluginState {
     plugins: DashboardPluginSettings,
-}
-
-impl Default for DashboardPluginState {
-    fn default() -> Self {
-        Self {
-            plugins: DashboardPluginSettings::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -213,7 +205,7 @@ fn builtin_theme_names() -> &'static [&'static str] {
 }
 
 fn is_builtin_theme(name: &str) -> bool {
-    builtin_theme_names().iter().any(|&n| n == name)
+    builtin_theme_names().contains(&name)
 }
 
 fn load_theme_state(state: &HttpServerState) -> (DashboardThemeState, bool) {

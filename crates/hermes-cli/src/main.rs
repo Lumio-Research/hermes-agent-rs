@@ -19,9 +19,9 @@ use hermes_cli::app::provider_api_key_from_env;
 use hermes_cli::cli::{Cli, CliCommand};
 use hermes_cli::App;
 use hermes_config::{
-    apply_user_config_patch, gateway_pid_path_in, hermes_home, load_config,
-    load_user_config_file, platform_token_or_extra, save_config_yaml, state_dir,
-    user_config_field_display, validate_config, ConfigError, PlatformConfig,
+    apply_user_config_patch, gateway_pid_path_in, hermes_home, load_config, load_user_config_file,
+    platform_token_or_extra, save_config_yaml, state_dir, user_config_field_display,
+    validate_config, ConfigError, PlatformConfig,
 };
 use hermes_core::AgentError;
 #[cfg(test)]
@@ -75,9 +75,8 @@ async fn main() {
         }
         CliCommand::Gateway { action, platform } => {
             // "hermes gateway setup whatsapp" → delegate to whatsapp handler
-            if action.as_deref() == Some("setup") && platform.is_some() {
-                let plat = platform.unwrap();
-                match plat.as_str() {
+            if let (Some("setup"), Some(plat)) = (action.as_deref(), platform.as_deref()) {
+                match plat {
                     "whatsapp" | "wa" => {
                         hermes_cli::commands::handle_cli_whatsapp(Some("setup".to_string())).await
                     }
@@ -1036,12 +1035,9 @@ async fn register_gateway_adapters(
     gateway: Arc<Gateway>,
     sidecar_tasks: &mut Vec<tokio::task::JoinHandle<()>>,
 ) -> Result<hermes_gateway::platform_registry::RegistrationSummary, AgentError> {
-    let summary = hermes_gateway::platform_registry::register_platforms(
-        gateway.as_ref(),
-        config,
-        sidecar_tasks,
-    )
-    .await?;
+    let summary =
+        hermes_gateway::platform_registry::register_platforms(&gateway, config, sidecar_tasks)
+            .await?;
 
     #[cfg(test)]
     {
@@ -2288,6 +2284,7 @@ fn clear_cloud_credential() -> Result<bool, AgentError> {
     Ok(true)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_cloud(
     action: Option<String>,
     agent_id: Option<String>,
@@ -2418,13 +2415,18 @@ async fn run_cloud(
                     .or_else(|| item.get("last_active_at"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("-");
-                println!("  • {}  status={}  model={}  updated={}", id, status, model, updated);
+                println!(
+                    "  • {}  status={}  model={}  updated={}",
+                    id, status, model, updated
+                );
             }
             Ok(())
         }
         "status" => {
             let id = agent_id.ok_or_else(|| {
-                AgentError::Config("Missing --agent-id. Usage: hermes cloud status --agent-id <id>".into())
+                AgentError::Config(
+                    "Missing --agent-id. Usage: hermes cloud status --agent-id <id>".into(),
+                )
             })?;
             let req = with_auth(client.get(format!("{}/api/v1/agents/{}/status", base_url, id)));
             let res = req
@@ -2472,7 +2474,9 @@ async fn run_cloud(
             })?;
             if let Some(n) = attempts {
                 if !(1..=4).contains(&n) {
-                    return Err(AgentError::Config("--attempts must be between 1 and 4".into()));
+                    return Err(AgentError::Config(
+                        "--attempts must be between 1 and 4".into(),
+                    ));
                 }
             }
             if env.is_some() || attempts.is_some() {
@@ -2489,7 +2493,11 @@ async fn run_cloud(
                     "workspace_mode": "blank",
                     "startup_commands": []
                 });
-                let req = with_auth(client.post(format!("{}/api/v1/agents", base_url)).json(&create_body));
+                let req = with_auth(
+                    client
+                        .post(format!("{}/api/v1/agents", base_url))
+                        .json(&create_body),
+                );
                 let res = req.send().await.map_err(|e| {
                     AgentError::Io(format!("cloud exec create-agent request failed: {}", e))
                 })?;
@@ -2521,7 +2529,10 @@ async fn run_cloud(
             });
             let req = with_auth(
                 client
-                    .post(format!("{}/api/v1/agents/{}/messages", base_url, target_agent_id))
+                    .post(format!(
+                        "{}/api/v1/agents/{}/messages",
+                        base_url, target_agent_id
+                    ))
                     .json(&body),
             );
             let res = req
@@ -2610,8 +2621,13 @@ async fn cloud_login(
         .json(&body)
         .send()
         .await
-        .map_err(|e| AgentError::Io(format!("cloud {} request failed: {}",
-            if register { "register" } else { "login" }, e)))?;
+        .map_err(|e| {
+            AgentError::Io(format!(
+                "cloud {} request failed: {}",
+                if register { "register" } else { "login" },
+                e
+            ))
+        })?;
     if !res.status().is_success() {
         let status = res.status();
         let text = res.text().await.unwrap_or_default();
@@ -2732,10 +2748,7 @@ async fn cloud_logs(
                 continue;
             }
             let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("?");
-            let created = msg
-                .get("created_at")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let created = msg.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
             let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
             let prefix = match role {
                 "user" => "↑",
@@ -2764,10 +2777,7 @@ async fn cloud_whoami(
         return Ok(());
     };
     let res = client
-        .get(format!(
-            "{}/api/v1/auth/me",
-            base_url.trim_end_matches('/')
-        ))
+        .get(format!("{}/api/v1/auth/me", base_url.trim_end_matches('/')))
         .bearer_auth(token)
         .send()
         .await
