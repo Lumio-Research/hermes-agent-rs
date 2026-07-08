@@ -16,6 +16,18 @@ Rust rewrite of [Hermes Agent](https://github.com/NousResearch/hermes-agent) by 
 
 > **v0.1 Status:** Core agent loop, 10 LLM providers, 30 tool backends, 17 platform adapters, memory system, and CLI/TUI are production-ready.
 
+## Project Status
+
+This repository is the Lumio Research Rust port of Hermes Agent. The reference
+implementation baseline is
+[`NousResearch/hermes-agent` `v2026.4.13`](https://github.com/NousResearch/hermes-agent/tree/v2026.4.13),
+resolved to commit `1af2e18d408a9dcc2c61d6fc1eef5c6667f8e254`.
+
+The `main` branch includes OpenAI-compatible function tool payload normalization
+for strict providers such as DeepSeek, Moonshot/Kimi, SiliconFlow, and other
+OpenAI-compatible endpoints. Users on the `v0.1.1` release binaries should build
+from `main` or use a release newer than `v0.1.1` for that fix.
+
 ## Why Hermes?
 
 🚀 **Zero dependencies** — Single static binary. No Python, no pip, no Docker. Copy it to a Raspberry Pi, a $3 VPS, or an air-gapped server and run it.
