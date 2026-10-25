@@ -32,6 +32,7 @@ pub use protocol::{
 pub use server::AcpServer;
 pub use session::{SessionInfo, SessionManager, SessionPhase, SessionState};
 
+use hermes_core::AgentService;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -70,7 +71,9 @@ impl Default for AcpConfig {
     }
 }
 
-/// Start the ACP server from CLI context.
+/// Start the ACP server from CLI context without an agent service.
+///
+/// Prompt requests fail until [`start_acp_server_with_agent`] is used.
 pub async fn start_acp_server(config: AcpConfig) -> Result<(), Box<dyn std::error::Error>> {
     let session_manager = Arc::new(SessionManager::new());
     let event_sink = Arc::new(EventSink::default());
@@ -81,6 +84,27 @@ pub async fn start_acp_server(config: AcpConfig) -> Result<(), Box<dyn std::erro
         event_sink.clone(),
         permission_store.clone(),
     ));
+
+    start_acp_server_with_handler(config, handler).await
+}
+
+/// Start the ACP server and dispatch Prompt to `agent`.
+pub async fn start_acp_server_with_agent(
+    config: AcpConfig,
+    agent: Arc<dyn AgentService>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let session_manager = Arc::new(SessionManager::new());
+    let event_sink = Arc::new(EventSink::default());
+    let permission_store = Arc::new(PermissionStore::new());
+
+    let handler = Arc::new(
+        HermesAcpHandler::new(
+            session_manager.clone(),
+            event_sink.clone(),
+            permission_store.clone(),
+        )
+        .with_agent(agent),
+    );
 
     start_acp_server_with_handler(config, handler).await
 }

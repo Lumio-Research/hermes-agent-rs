@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use hermes_core::{AgentOverrides, AgentService};
 use serde_json::{json, Value};
 
 use crate::events::{AcpEvent, EventSink};
@@ -76,6 +77,9 @@ pub struct HermesAcpHandler {
     pub session_manager: Arc<SessionManager>,
     pub event_sink: Arc<EventSink>,
     pub permission_store: Arc<PermissionStore>,
+    /// Optional in-process / remote agent. When set, `prompt` / `session/prompt`
+    /// dispatch to the real agent loop instead of echoing a placeholder.
+    pub agent: Option<Arc<dyn AgentService>>,
     version: String,
 }
 
@@ -89,8 +93,15 @@ impl HermesAcpHandler {
             session_manager,
             event_sink,
             permission_store,
+            agent: None,
             version: env!("CARGO_PKG_VERSION").to_string(),
         }
+    }
+
+    /// Attach an [`AgentService`] so Prompt requests run the real agent loop.
+    pub fn with_agent(mut self, agent: Arc<dyn AgentService>) -> Self {
+        self.agent = Some(agent);
+        self
     }
 
     #[allow(dead_code)]
@@ -351,20 +362,45 @@ impl AcpHandler for HermesAcpHandler {
                 self.session_manager
                     .set_phase(session_id, SessionPhase::Active);
 
-                // For now, echo a placeholder response.
-                // Real integration would dispatch to the agent loop here.
-                let response_text = format!(
-                    "Received prompt on session {}: {}",
-                    session_id,
-                    &user_text[..user_text.len().min(100)]
-                );
-                self.event_sink
-                    .push(AcpEvent::message_complete(session_id, &response_text));
+                let Some(agent) = self.agent.as_ref() else {
+                    self.session_manager
+                        .set_phase(session_id, SessionPhase::Failed);
+                    return AcpResponse::error(
+                        request.id,
+                        -32000,
+                        "ACP agent service is not configured; cannot run Prompt",
+                    );
+                };
 
-                self.session_manager
-                    .set_phase(session_id, SessionPhase::Idle);
+                let session_model = self
+                    .session_manager
+                    .get_session(session_id)
+                    .and_then(|s| s.model.clone());
+                let overrides = AgentOverrides {
+                    model: session_model,
+                    personality: None,
+                };
 
-                AcpResponse::success(request.id, json!({"stop_reason": "end_turn"}))
+                match agent.send_message(session_id, &user_text, overrides).await {
+                    Ok(reply) => {
+                        let response_text = reply.text;
+                        self.event_sink
+                            .push(AcpEvent::message_complete(session_id, &response_text));
+                        self.session_manager
+                            .set_phase(session_id, SessionPhase::Idle);
+                        AcpResponse::success(request.id, json!({"stop_reason": "end_turn"}))
+                    }
+                    Err(err) => {
+                        tracing::error!(error = %err, "ACP Prompt agent loop failed");
+                        self.session_manager
+                            .set_phase(session_id, SessionPhase::Failed);
+                        AcpResponse::error(
+                            request.id,
+                            -32000,
+                            format!("Agent loop failed: {err}"),
+                        )
+                    }
+                }
             }
 
             // -- Session configuration --------------------------------------
@@ -642,6 +678,108 @@ mod tests {
             resp.result.unwrap()["stop_reason"].as_str().unwrap(),
             "end_turn"
         );
+    }
+
+    struct EchoAgent;
+
+    #[async_trait::async_trait]
+    impl AgentService for EchoAgent {
+        async fn send_message(
+            &self,
+            _session_id: &str,
+            text: &str,
+            _overrides: AgentOverrides,
+        ) -> Result<hermes_core::AgentReply, hermes_core::AgentError> {
+            Ok(hermes_core::AgentReply {
+                text: format!("agent:{text}"),
+                message_count: 1,
+            })
+        }
+
+        async fn send_message_stream(
+            &self,
+            session_id: &str,
+            text: &str,
+            overrides: AgentOverrides,
+            _on_chunk: Arc<dyn Fn(hermes_core::StreamChunk) + Send + Sync>,
+        ) -> Result<hermes_core::AgentReply, hermes_core::AgentError> {
+            self.send_message(session_id, text, overrides).await
+        }
+
+        async fn get_session_messages(
+            &self,
+            _session_id: &str,
+        ) -> Result<Vec<hermes_core::Message>, hermes_core::AgentError> {
+            Ok(Vec::new())
+        }
+
+        async fn reset_session(&self, _session_id: &str) -> Result<(), hermes_core::AgentError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_session_prompt_dispatches_to_agent() {
+        let handler = make_handler().with_agent(Arc::new(EchoAgent));
+        let created = handler
+            .handle_request(AcpRequest {
+                jsonrpc: "2.0".into(),
+                id: Some(json!(1)),
+                method: "session/new".into(),
+                params: Some(json!({"cwd": "/tmp"})),
+            })
+            .await;
+        let session_id = created.result.unwrap()["session_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let resp = handler
+            .handle_request(AcpRequest {
+                jsonrpc: "2.0".into(),
+                id: Some(json!(2)),
+                method: "session/prompt".into(),
+                params: Some(json!({
+                    "session_id": session_id,
+                    "prompt": [{"type": "text", "text": "hello"}],
+                })),
+            })
+            .await;
+        assert!(resp.error.is_none(), "{resp:?}");
+        let completed = handler.event_sink.drain_all();
+        let text = completed
+            .iter()
+            .find_map(|event| event.text.clone())
+            .unwrap_or_default();
+        assert!(
+            text.contains("agent:hello"),
+            "expected agent reply in events, got {text:?} events={completed:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prompt_without_agent_is_an_error() {
+        let handler = make_handler();
+        let created = handler
+            .handle_request(AcpRequest {
+                jsonrpc: "2.0".into(),
+                id: Some(json!(1)),
+                method: "session/new".into(),
+                params: Some(json!({"cwd": "/tmp"})),
+            })
+            .await;
+        let session_id = created.result.unwrap()["session_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let resp = handler
+            .handle_request(AcpRequest {
+                jsonrpc: "2.0".into(),
+                id: Some(json!(2)),
+                method: "prompt".into(),
+                params: Some(json!({"session_id": session_id, "text": "hello"})),
+            })
+            .await;
+        assert!(resp.error.is_some());
     }
 
     #[tokio::test]

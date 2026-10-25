@@ -3755,8 +3755,10 @@ fn count_files_recursive(dir: &std::path::Path) -> usize {
 pub async fn handle_cli_acp(action: Option<String>) -> Result<(), hermes_core::AgentError> {
     match action.as_deref().unwrap_or("status") {
         "start" => {
-            let config = hermes_config::load_config(None)
+            let mut config = hermes_config::load_config(None)
                 .map_err(|e| hermes_core::AgentError::Config(e.to_string()))?;
+            // ACP clients drive approval themselves; do not block the loop on CLI prompts.
+            config.approval.require_approval = false;
 
             let model = config.model.clone().unwrap_or_else(|| "gpt-4o".to_string());
 
@@ -3767,12 +3769,38 @@ pub async fn handle_cli_acp(action: Option<String>) -> Result<(), hermes_core::A
                 max_turns: config.max_turns as usize,
             };
 
-            println!(
+            let tool_registry = std::sync::Arc::new(hermes_tools::ToolRegistry::new());
+            let terminal_backend: std::sync::Arc<dyn hermes_core::TerminalBackend> =
+                std::sync::Arc::new(hermes_environments::LocalBackend::default());
+            let skill_store = std::sync::Arc::new(hermes_skills::FileSkillStore::new(
+                hermes_skills::FileSkillStore::default_dir(),
+            ));
+            let skill_provider: std::sync::Arc<dyn hermes_core::SkillProvider> =
+                std::sync::Arc::new(hermes_skills::SkillManager::new(skill_store));
+            hermes_tools::register_builtin_tools(
+                &tool_registry,
+                terminal_backend,
+                skill_provider,
+            );
+            let hermes_home = hermes_config::hermes_home();
+            let session_persistence = std::sync::Arc::new(
+                hermes_agent::session_persistence::SessionPersistence::new(&hermes_home),
+            );
+            let _ = session_persistence.ensure_db();
+            let agent: std::sync::Arc<dyn hermes_core::AgentService> =
+                std::sync::Arc::new(hermes_agent::LocalAgentService::new(
+                    std::sync::Arc::new(config),
+                    tool_registry,
+                    session_persistence,
+                ));
+
+            // Banner goes to stderr so stdout stays a JSON-RPC stream.
+            eprintln!(
                 "Starting ACP server (model={}, max_turns={})...",
                 acp_config.model, acp_config.max_turns
             );
 
-            hermes_acp::start_acp_server(acp_config)
+            hermes_acp::start_acp_server_with_agent(acp_config, agent)
                 .await
                 .map_err(|e| hermes_core::AgentError::Io(format!("ACP server error: {}", e)))?;
         }
