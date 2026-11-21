@@ -108,6 +108,11 @@ pub struct ModelInfo {
     pub output_cost_per_million: Option<f64>,
 }
 
+/// Published list price for a model, from the `llm-prices` table.
+fn list_price(provider: &str, model: &str) -> Option<&'static llm_prices::Price> {
+    llm_prices::lookup_provider(provider, model)
+}
+
 /// Static database of well-known models.
 pub fn known_models() -> Vec<ModelInfo> {
     vec![
@@ -120,8 +125,8 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(2.50),
-            output_cost_per_million: Some(10.00),
+            input_cost_per_million: list_price("openai", "gpt-4o").and_then(|p| p.input),
+            output_cost_per_million: list_price("openai", "gpt-4o").and_then(|p| p.output),
         },
         ModelInfo {
             name: "gpt-4o-mini".into(),
@@ -132,8 +137,8 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: false,
-            input_cost_per_million: Some(0.15),
-            output_cost_per_million: Some(0.60),
+            input_cost_per_million: list_price("openai", "gpt-4o-mini").and_then(|p| p.input),
+            output_cost_per_million: list_price("openai", "gpt-4o-mini").and_then(|p| p.output),
         },
         ModelInfo {
             name: "gpt-4.1".into(),
@@ -144,8 +149,8 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(2.00),
-            output_cost_per_million: Some(8.00),
+            input_cost_per_million: list_price("openai", "gpt-4.1").and_then(|p| p.input),
+            output_cost_per_million: list_price("openai", "gpt-4.1").and_then(|p| p.output),
         },
         ModelInfo {
             name: "gpt-4.1-mini".into(),
@@ -156,8 +161,8 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: false,
-            input_cost_per_million: Some(0.40),
-            output_cost_per_million: Some(1.60),
+            input_cost_per_million: list_price("openai", "gpt-4.1-mini").and_then(|p| p.input),
+            output_cost_per_million: list_price("openai", "gpt-4.1-mini").and_then(|p| p.output),
         },
         ModelInfo {
             name: "gpt-4.1-nano".into(),
@@ -168,8 +173,8 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: false,
-            input_cost_per_million: Some(0.10),
-            output_cost_per_million: Some(0.40),
+            input_cost_per_million: list_price("openai", "gpt-4.1-nano").and_then(|p| p.input),
+            output_cost_per_million: list_price("openai", "gpt-4.1-nano").and_then(|p| p.output),
         },
         ModelInfo {
             name: "o3".into(),
@@ -180,8 +185,8 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(10.00),
-            output_cost_per_million: Some(40.00),
+            input_cost_per_million: list_price("openai", "o3").and_then(|p| p.input),
+            output_cost_per_million: list_price("openai", "o3").and_then(|p| p.output),
         },
         ModelInfo {
             name: "o3-mini".into(),
@@ -192,8 +197,8 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(1.10),
-            output_cost_per_million: Some(4.40),
+            input_cost_per_million: list_price("openai", "o3-mini").and_then(|p| p.input),
+            output_cost_per_million: list_price("openai", "o3-mini").and_then(|p| p.output),
         },
         ModelInfo {
             name: "claude-opus-4-6".into(),
@@ -204,8 +209,10 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(15.00),
-            output_cost_per_million: Some(75.00),
+            input_cost_per_million: list_price("anthropic", "claude-opus-4-6")
+                .and_then(|p| p.input),
+            output_cost_per_million: list_price("anthropic", "claude-opus-4-6")
+                .and_then(|p| p.output),
         },
         ModelInfo {
             name: "claude-sonnet-4-6".into(),
@@ -216,8 +223,10 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(3.00),
-            output_cost_per_million: Some(15.00),
+            input_cost_per_million: list_price("anthropic", "claude-sonnet-4-6")
+                .and_then(|p| p.input),
+            output_cost_per_million: list_price("anthropic", "claude-sonnet-4-6")
+                .and_then(|p| p.output),
         },
         ModelInfo {
             name: "claude-sonnet-4".into(),
@@ -228,8 +237,10 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(3.00),
-            output_cost_per_million: Some(15.00),
+            input_cost_per_million: list_price("anthropic", "claude-sonnet-4")
+                .and_then(|p| p.input),
+            output_cost_per_million: list_price("anthropic", "claude-sonnet-4")
+                .and_then(|p| p.output),
         },
         ModelInfo {
             name: "claude-3-5-haiku".into(),
@@ -240,8 +251,10 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: false,
-            input_cost_per_million: Some(0.80),
-            output_cost_per_million: Some(4.00),
+            input_cost_per_million: list_price("anthropic", "claude-3-5-haiku")
+                .and_then(|p| p.input),
+            output_cost_per_million: list_price("anthropic", "claude-3-5-haiku")
+                .and_then(|p| p.output),
         },
         ModelInfo {
             name: "gemini-2.5-pro".into(),
@@ -252,8 +265,8 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(1.25),
-            output_cost_per_million: Some(10.00),
+            input_cost_per_million: list_price("google", "gemini-2.5-pro").and_then(|p| p.input),
+            output_cost_per_million: list_price("google", "gemini-2.5-pro").and_then(|p| p.output),
         },
         ModelInfo {
             name: "gemini-2.5-flash".into(),
@@ -264,8 +277,9 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(0.15),
-            output_cost_per_million: Some(0.60),
+            input_cost_per_million: list_price("google", "gemini-2.5-flash").and_then(|p| p.input),
+            output_cost_per_million: list_price("google", "gemini-2.5-flash")
+                .and_then(|p| p.output),
         },
         ModelInfo {
             name: "gemini-2.0-flash".into(),
@@ -288,8 +302,8 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: false,
-            input_cost_per_million: Some(0.14),
-            output_cost_per_million: Some(0.28),
+            input_cost_per_million: list_price("deepseek", "deepseek-chat").and_then(|p| p.input),
+            output_cost_per_million: list_price("deepseek", "deepseek-chat").and_then(|p| p.output),
         },
         ModelInfo {
             name: "deepseek-reasoner".into(),
@@ -300,8 +314,10 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(0.55),
-            output_cost_per_million: Some(2.19),
+            input_cost_per_million: list_price("deepseek", "deepseek-reasoner")
+                .and_then(|p| p.input),
+            output_cost_per_million: list_price("deepseek", "deepseek-reasoner")
+                .and_then(|p| p.output),
         },
         ModelInfo {
             name: "deepseek-v4-flash".into(),
@@ -312,8 +328,10 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(0.14),
-            output_cost_per_million: Some(0.28),
+            input_cost_per_million: list_price("deepseek", "deepseek-v4-flash")
+                .and_then(|p| p.input),
+            output_cost_per_million: list_price("deepseek", "deepseek-v4-flash")
+                .and_then(|p| p.output),
         },
         ModelInfo {
             name: "deepseek-v4-pro".into(),
@@ -324,8 +342,9 @@ pub fn known_models() -> Vec<ModelInfo> {
             supports_tools: true,
             supports_streaming: true,
             supports_reasoning: true,
-            input_cost_per_million: Some(1.74),
-            output_cost_per_million: Some(3.48),
+            input_cost_per_million: list_price("deepseek", "deepseek-v4-pro").and_then(|p| p.input),
+            output_cost_per_million: list_price("deepseek", "deepseek-v4-pro")
+                .and_then(|p| p.output),
         },
     ]
 }
@@ -563,6 +582,25 @@ mod tests {
         let info = get_model_info("gpt-4o").unwrap();
         assert_eq!(info.context_window, 128_000);
         assert!(info.supports_vision);
+    }
+
+    #[test]
+    fn test_known_model_list_prices() {
+        let opus = get_model_info("claude-opus-4-6").unwrap();
+        assert_eq!(opus.input_cost_per_million, Some(5.0));
+        assert_eq!(opus.output_cost_per_million, Some(25.0));
+        let o3 = get_model_info("o3").unwrap();
+        assert_eq!(o3.input_cost_per_million, Some(2.0));
+        assert_eq!(o3.output_cost_per_million, Some(8.0));
+        let flash = get_model_info("gemini-2.5-flash").unwrap();
+        assert_eq!(flash.input_cost_per_million, Some(0.30));
+        assert_eq!(flash.output_cost_per_million, Some(2.50));
+        let ds = get_model_info("deepseek-chat").unwrap();
+        assert_eq!(ds.input_cost_per_million, Some(0.30));
+        assert_eq!(ds.output_cost_per_million, Some(1.20));
+        assert!(known_models()
+            .iter()
+            .all(|m| m.input_cost_per_million.is_some()));
     }
 
     #[test]

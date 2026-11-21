@@ -22,6 +22,7 @@ thiserror = { workspace = true }
 futures = { workspace = true }
 strsim = "0.11"
 dirs = "6"
+llm-prices = "1.8.0"
 tempfile = "3"
 
 [dev-dependencies]
